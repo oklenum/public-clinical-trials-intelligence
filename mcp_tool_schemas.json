@@ -1,0 +1,1411 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_version": "1.0.0",
+  "$defs": {
+    "IsoDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "NctId": {
+      "type": "string",
+      "pattern": "^NCT\\d{8}$"
+    },
+    "NonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "CountryCode": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "OverallStatus": {
+      "type": "string",
+      "enum": [
+        "NOT_YET_RECRUITING",
+        "RECRUITING",
+        "ENROLLING_BY_INVITATION",
+        "ACTIVE_NOT_RECRUITING",
+        "SUSPENDED",
+        "TERMINATED",
+        "WITHDRAWN",
+        "COMPLETED",
+        "UNKNOWN_STATUS"
+      ]
+    },
+    "Phase": {
+      "type": "string",
+      "enum": [
+        "EARLY_PHASE_1",
+        "PHASE_1",
+        "PHASE_1_2",
+        "PHASE_2",
+        "PHASE_2_3",
+        "PHASE_3",
+        "PHASE_4",
+        "NOT_APPLICABLE"
+      ]
+    },
+    "StudyType": {
+      "type": "string",
+      "enum": [
+        "INTERVENTIONAL",
+        "OBSERVATIONAL",
+        "EXPANDED_ACCESS"
+      ]
+    },
+    "SortDirection": {
+      "type": "string",
+      "enum": [
+        "ASC",
+        "DESC"
+      ]
+    },
+    "TrialsSortField": {
+      "type": "string",
+      "enum": [
+        "RELEVANCE",
+        "LAST_UPDATE_POSTED",
+        "FIRST_POSTED",
+        "START_DATE",
+        "PRIMARY_COMPLETION_DATE",
+        "COMPLETION_DATE"
+      ]
+    },
+    "TrialsSort": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "direction"
+      ],
+      "properties": {
+        "field": {
+          "$ref": "#/$defs/TrialsSortField"
+        },
+        "direction": {
+          "$ref": "#/$defs/SortDirection"
+        }
+      }
+    },
+    "TrialsFilters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "indication": {
+          "$ref": "#/$defs/NonEmptyString",
+          "description": "Condition/indication keyword as a simple, user-facing search term."
+        },
+        "query_term": {
+          "$ref": "#/$defs/NonEmptyString",
+          "description": "Free-form query term for ClinicalTrials.gov query.term (kept as a single string, not narrative)."
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Phase"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "overall_statuses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OverallStatus"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "study_type": {
+          "$ref": "#/$defs/StudyType"
+        },
+        "sponsor_or_collaborator": {
+          "$ref": "#/$defs/NonEmptyString",
+          "description": "Organization name fragment to match sponsors/collaborators."
+        },
+        "countries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CountryCode"
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "ISO 3166-1 alpha-2 country codes."
+        },
+        "first_posted_from": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "first_posted_to": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "last_update_posted_from": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "last_update_posted_to": {
+          "$ref": "#/$defs/IsoDate"
+        }
+      }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "INVALID_ARGUMENT",
+        "NOT_FOUND",
+        "UPSTREAM_ERROR",
+        "RATE_LIMITED",
+        "TIMEOUT",
+        "INTERNAL_ERROR"
+      ]
+    },
+    "Error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "http_status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "upstream": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "service": {
+              "type": "string",
+              "enum": [
+                "CLINICALTRIALS_GOV",
+                "PUBMED"
+              ]
+            },
+            "endpoint": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Structured context fields useful for debugging (no narrative)."
+        }
+      }
+    },
+    "SuccessEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "data"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "data": {}
+      }
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": false
+        },
+        "error": {
+          "$ref": "#/$defs/Error"
+        }
+      }
+    },
+    "ToolOutputEnvelope": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/SuccessEnvelope"
+        },
+        {
+          "$ref": "#/$defs/ErrorEnvelope"
+        }
+      ]
+    },
+    "Sponsor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "class": {
+          "type": "string",
+          "enum": [
+            "NIH",
+            "OTHER_GOV",
+            "INDUSTRY",
+            "OTHER",
+            "UNKNOWN"
+          ]
+        }
+      }
+    },
+    "Enrollment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "count",
+        "type"
+      ],
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "ACTUAL",
+            "ESTIMATED"
+          ]
+        }
+      }
+    },
+    "LocationCountry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/CountryCode"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "TrialSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nct_id",
+        "brief_title"
+      ],
+      "properties": {
+        "nct_id": {
+          "$ref": "#/$defs/NctId"
+        },
+        "brief_title": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "official_title": {
+          "type": "string"
+        },
+        "acronym": {
+          "type": "string"
+        },
+        "overall_status": {
+          "$ref": "#/$defs/OverallStatus"
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Phase"
+          },
+          "uniqueItems": true
+        },
+        "study_type": {
+          "$ref": "#/$defs/StudyType"
+        },
+        "enrollment": {
+          "$ref": "#/$defs/Enrollment"
+        },
+        "lead_sponsor": {
+          "$ref": "#/$defs/Sponsor"
+        },
+        "collaborators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Sponsor"
+          },
+          "uniqueItems": true
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NonEmptyString"
+          },
+          "uniqueItems": true
+        },
+        "interventions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NonEmptyString"
+          },
+          "uniqueItems": true
+        },
+        "countries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LocationCountry"
+          },
+          "uniqueItems": true
+        },
+        "first_posted": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "last_update_posted": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "start_date": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "primary_completion_date": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "completion_date": {
+          "$ref": "#/$defs/IsoDate"
+        }
+      }
+    },
+    "OutcomeMeasure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "measure"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "PRIMARY",
+            "SECONDARY",
+            "OTHER"
+          ]
+        },
+        "measure": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "time_frame": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "ArmGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label"
+      ],
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "EXPERIMENTAL",
+            "ACTIVE_COMPARATOR",
+            "PLACEBO_COMPARATOR",
+            "SHAM_COMPARATOR",
+            "NO_INTERVENTION",
+            "OTHER"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "interventions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NonEmptyString"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "Eligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "criteria": {
+          "type": "string"
+        },
+        "healthy_volunteers": {
+          "type": "boolean"
+        },
+        "sex": {
+          "type": "string",
+          "enum": [
+            "ALL",
+            "MALE",
+            "FEMALE"
+          ]
+        },
+        "minimum_age": {
+          "type": "string"
+        },
+        "maximum_age": {
+          "type": "string"
+        },
+        "standard_age": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "CHILD",
+              "ADULT",
+              "OLDER_ADULT"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "StudyDesign": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allocation": {
+          "type": "string",
+          "enum": [
+            "RANDOMIZED",
+            "NON_RANDOMIZED",
+            "NA"
+          ]
+        },
+        "intervention_model": {
+          "type": "string"
+        },
+        "masking": {
+          "type": "string"
+        },
+        "primary_purpose": {
+          "type": "string"
+        }
+      }
+    },
+    "FullTrialRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nct_id"
+      ],
+      "properties": {
+        "nct_id": {
+          "$ref": "#/$defs/NctId"
+        },
+        "brief_title": {
+          "type": "string"
+        },
+        "official_title": {
+          "type": "string"
+        },
+        "overall_status": {
+          "$ref": "#/$defs/OverallStatus"
+        },
+        "study_type": {
+          "$ref": "#/$defs/StudyType"
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Phase"
+          },
+          "uniqueItems": true
+        },
+        "enrollment": {
+          "$ref": "#/$defs/Enrollment"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NonEmptyString"
+          },
+          "uniqueItems": true
+        },
+        "interventions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NonEmptyString"
+          },
+          "uniqueItems": true
+        },
+        "lead_sponsor": {
+          "$ref": "#/$defs/Sponsor"
+        },
+        "collaborators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Sponsor"
+          },
+          "uniqueItems": true
+        },
+        "first_posted": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "last_update_posted": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "start_date": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "primary_completion_date": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "completion_date": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "study_design": {
+          "$ref": "#/$defs/StudyDesign"
+        },
+        "arms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ArmGroup"
+          }
+        },
+        "eligibility": {
+          "$ref": "#/$defs/Eligibility"
+        },
+        "outcomes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OutcomeMeasure"
+          }
+        },
+        "countries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LocationCountry"
+          },
+          "uniqueItems": true
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "registry": {
+              "type": "string",
+              "enum": [
+                "CLINICALTRIALS_GOV"
+              ]
+            },
+            "api_version": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "CompareAttribute": {
+      "type": "string",
+      "enum": [
+        "PHASES",
+        "OVERALL_STATUS",
+        "ENROLLMENT",
+        "LEAD_SPONSOR",
+        "COLLABORATORS",
+        "CONDITIONS",
+        "INTERVENTIONS",
+        "ARMS",
+        "ELIGIBILITY",
+        "OUTCOMES_PRIMARY",
+        "OUTCOMES_SECONDARY",
+        "START_DATE",
+        "PRIMARY_COMPLETION_DATE",
+        "COMPLETION_DATE",
+        "COUNTRIES"
+      ]
+    },
+    "CompareCell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nct_id",
+        "value"
+      ],
+      "properties": {
+        "nct_id": {
+          "$ref": "#/$defs/NctId"
+        },
+        "value": {
+          "description": "A structured value whose type depends on the requested attribute.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array"
+            },
+            {
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    "GroupByKey": {
+      "type": "string",
+      "enum": [
+        "PHASE",
+        "OVERALL_STATUS",
+        "LEAD_SPONSOR",
+        "COUNTRY",
+        "FIRST_POSTED_MONTH",
+        "LAST_UPDATE_POSTED_MONTH"
+      ]
+    },
+    "AggregateMetric": {
+      "type": "string",
+      "enum": [
+        "COUNT_TRIALS"
+      ]
+    },
+    "AggregateGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "group",
+        "metrics"
+      ],
+      "properties": {
+        "group": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "value"
+          ],
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/GroupByKey"
+            },
+            "value": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "count_trials"
+          ],
+          "properties": {
+            "count_trials": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "PubmedCitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pmid",
+        "title"
+      ],
+      "properties": {
+        "pmid": {
+          "type": "string",
+          "pattern": "^\\d+$"
+        },
+        "title": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "journal": {
+          "type": "string"
+        },
+        "year": {
+          "type": "integer",
+          "minimum": 1800,
+          "maximum": 2100
+        },
+        "doi": {
+          "type": "string"
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NonEmptyString"
+          }
+        },
+        "pub_date": {
+          "type": "string"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "db": {
+              "type": "string",
+              "enum": [
+                "PUBMED"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "tools": {
+    "search_trials": {
+      "description": "Search ClinicalTrials.gov for studies matching structured filters and return NCT IDs plus summary fields.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "filters"
+        ],
+        "properties": {
+          "filters": {
+            "$ref": "#/$defs/TrialsFilters"
+          },
+          "page_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 25
+          },
+          "page_token": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Opaque pagination token from a prior response."
+          },
+          "sort": {
+            "$ref": "#/$defs/TrialsSort"
+          },
+          "include_fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "NCT_ID",
+                "BRIEF_TITLE",
+                "OFFICIAL_TITLE",
+                "ACRONYM",
+                "OVERALL_STATUS",
+                "PHASES",
+                "STUDY_TYPE",
+                "ENROLLMENT",
+                "SPONSORS",
+                "CONDITIONS",
+                "INTERVENTIONS",
+                "COUNTRIES",
+                "FIRST_POSTED",
+                "LAST_UPDATE_POSTED",
+                "START_DATE",
+                "PRIMARY_COMPLETION_DATE",
+                "COMPLETION_DATE"
+              ]
+            },
+            "uniqueItems": true,
+            "description": "Optional field selection hint; server may ignore unknown/unsupported values."
+          }
+        }
+      },
+      "output_schema": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/ToolOutputEnvelope"
+          },
+          {
+            "if": {
+              "properties": {
+                "ok": {
+                  "const": true
+                }
+              },
+              "required": [
+                "ok"
+              ]
+            },
+            "then": {
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "trials",
+                    "page"
+                  ],
+                  "properties": {
+                    "trials": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/TrialSummary"
+                      }
+                    },
+                    "page": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "page_size"
+                      ],
+                      "properties": {
+                        "page_size": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "next_page_token": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "required": [
+                "data"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "get_trial": {
+      "description": "Retrieve a full structured record for a single NCT ID as schema-validated JSON.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nct_id"
+        ],
+        "properties": {
+          "nct_id": {
+            "$ref": "#/$defs/NctId"
+          }
+        }
+      },
+      "output_schema": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/ToolOutputEnvelope"
+          },
+          {
+            "if": {
+              "properties": {
+                "ok": {
+                  "const": true
+                }
+              },
+              "required": [
+                "ok"
+              ]
+            },
+            "then": {
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "trial"
+                  ],
+                  "properties": {
+                    "trial": {
+                      "$ref": "#/$defs/FullTrialRecord"
+                    }
+                  }
+                }
+              },
+              "required": [
+                "data"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "get_trial_details": {
+      "description": "Retrieve a structured trial record for a single NCT ID (excluding outcomes/endpoints).",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nct_id"
+        ],
+        "properties": {
+          "nct_id": {
+            "$ref": "#/$defs/NctId"
+          }
+        }
+      },
+      "output_schema": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/ToolOutputEnvelope"
+          },
+          {
+            "if": {
+              "properties": {
+                "ok": {
+                  "const": true
+                }
+              },
+              "required": [
+                "ok"
+              ]
+            },
+            "then": {
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "trial"
+                  ],
+                  "properties": {
+                    "trial": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/FullTrialRecord"
+                        },
+                        {
+                          "properties": {
+                            "outcomes": false
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "required": [
+                "data"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "get_trial_endpoints": {
+      "description": "Retrieve primary/secondary outcome measures for a single NCT ID as structured JSON.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nct_id"
+        ],
+        "properties": {
+          "nct_id": {
+            "$ref": "#/$defs/NctId"
+          }
+        }
+      },
+      "output_schema": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/ToolOutputEnvelope"
+          },
+          {
+            "if": {
+              "properties": {
+                "ok": {
+                  "const": true
+                }
+              },
+              "required": [
+                "ok"
+              ]
+            },
+            "then": {
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "nct_id",
+                    "outcomes"
+                  ],
+                  "properties": {
+                    "nct_id": {
+                      "$ref": "#/$defs/NctId"
+                    },
+                    "outcomes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/OutcomeMeasure"
+                      }
+                    }
+                  }
+                }
+              },
+              "required": [
+                "data"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "compare_trials": {
+      "description": "Produce a deterministic, side-by-side comparison for multiple NCT IDs over a caller-selected set of attributes.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nct_ids",
+          "attributes"
+        ],
+        "properties": {
+          "nct_ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/NctId"
+            },
+            "minItems": 2,
+            "maxItems": 10,
+            "uniqueItems": true
+          },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CompareAttribute"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        }
+      },
+      "output_schema": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/ToolOutputEnvelope"
+          },
+          {
+            "if": {
+              "properties": {
+                "ok": {
+                  "const": true
+                }
+              },
+              "required": [
+                "ok"
+              ]
+            },
+            "then": {
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "nct_ids",
+                    "comparisons"
+                  ],
+                  "properties": {
+                    "nct_ids": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/NctId"
+                      },
+                      "minItems": 2
+                    },
+                    "comparisons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "attribute",
+                          "values"
+                        ],
+                        "properties": {
+                          "attribute": {
+                            "$ref": "#/$defs/CompareAttribute"
+                          },
+                          "values": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/$defs/CompareCell"
+                            },
+                            "minItems": 2
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "required": [
+                "data"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "aggregate_trials": {
+      "description": "Compute grouped summaries over a trial search result set using explicit group_by fields and metrics.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "filters",
+          "group_by",
+          "metrics"
+        ],
+        "properties": {
+          "filters": {
+            "$ref": "#/$defs/TrialsFilters"
+          },
+          "group_by": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/GroupByKey"
+            },
+            "minItems": 1,
+            "maxItems": 1,
+            "uniqueItems": true,
+            "description": "Grouping key(s). This demo schema allows a single grouping dimension for deterministic outputs."
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/AggregateMetric"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 50,
+            "description": "Maximum number of groups to return (e.g., top sponsors)."
+          },
+          "sort": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "metric",
+              "direction"
+            ],
+            "properties": {
+              "metric": {
+                "$ref": "#/$defs/AggregateMetric"
+              },
+              "direction": {
+                "$ref": "#/$defs/SortDirection"
+              }
+            }
+          }
+        }
+      },
+      "output_schema": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/ToolOutputEnvelope"
+          },
+          {
+            "if": {
+              "properties": {
+                "ok": {
+                  "const": true
+                }
+              },
+              "required": [
+                "ok"
+              ]
+            },
+            "then": {
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "group_by",
+                    "metrics",
+                    "groups",
+                    "total_trials"
+                  ],
+                  "properties": {
+                    "group_by": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/GroupByKey"
+                      },
+                      "minItems": 1,
+                      "maxItems": 1
+                    },
+                    "metrics": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/AggregateMetric"
+                      },
+                      "minItems": 1
+                    },
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/AggregateGroup"
+                      }
+                    },
+                    "total_trials": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              },
+              "required": [
+                "data"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "search_pubmed": {
+      "description": "Search PubMed for citations related to an NCT ID or topic and return bibliographic metadata without interpretation.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nct_id": {
+            "$ref": "#/$defs/NctId",
+            "description": "If provided, the server searches PubMed for this registry identifier."
+          },
+          "query": {
+            "$ref": "#/$defs/NonEmptyString",
+            "description": "If provided, the server runs an Entrez query (term=...)."
+          },
+          "retmax": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 20
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "RELEVANCE",
+              "PUB_DATE"
+            ],
+            "default": "RELEVANCE"
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "nct_id"
+            ]
+          },
+          {
+            "required": [
+              "query"
+            ]
+          }
+        ]
+      },
+      "output_schema": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/ToolOutputEnvelope"
+          },
+          {
+            "if": {
+              "properties": {
+                "ok": {
+                  "const": true
+                }
+              },
+              "required": [
+                "ok"
+              ]
+            },
+            "then": {
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "citations"
+                  ],
+                  "properties": {
+                    "citations": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/PubmedCitation"
+                      }
+                    },
+                    "query_used": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "term"
+                      ],
+                      "properties": {
+                        "term": {
+                          "$ref": "#/$defs/NonEmptyString"
+                        },
+                        "retmax": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 200
+                        },
+                        "sort": {
+                          "type": "string",
+                          "enum": [
+                            "RELEVANCE",
+                            "PUB_DATE"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "required": [
+                "data"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
