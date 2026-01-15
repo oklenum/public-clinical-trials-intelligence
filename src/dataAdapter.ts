@@ -225,8 +225,14 @@ async function collectTrialsForAggregation(filters: SearchTrialsInput["filters"]
 
   const collected: any[] = [];
   let pageToken: string | undefined = undefined;
+  const seenTokens = new Set<string>();
+  let iterations = 0;
+  const maxIterations = 50;
 
   while (collected.length < MAX_AGG_TRIALS) {
+    iterations += 1;
+    if (iterations > maxIterations) break;
+
     const result = await searchTrials({
       filters,
       page_size: AGG_PAGE_SIZE,
@@ -236,9 +242,17 @@ async function collectTrialsForAggregation(filters: SearchTrialsInput["filters"]
 
     if (!result.ok) return result;
 
+    if (pageToken) seenTokens.add(pageToken);
     collected.push(...result.data.trials);
-    pageToken = result.data.page.next_page_token;
-    if (!pageToken) break;
+    const nextToken = result.data.page.next_page_token;
+
+    // Safety guards: if upstream returns inconsistent pagination (e.g., empty pages with a token
+    // or token loops), stop rather than hanging the demo.
+    if (!nextToken) break;
+    if (result.data.trials.length === 0) break;
+    if (nextToken === pageToken) break;
+    if (seenTokens.has(nextToken)) break;
+    pageToken = nextToken;
   }
 
   return { ok: true, data: { trials: collected.slice(0, MAX_AGG_TRIALS) } };
