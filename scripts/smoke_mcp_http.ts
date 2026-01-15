@@ -18,14 +18,24 @@ const server = spawn("node", [serverPath], {
 });
 
 const serverUrl = await new Promise<URL>((resolve, reject) => {
-  const timeout = setTimeout(() => reject(new Error("Timed out waiting for MCP HTTP server to start")), 10_000);
+  const timeout = setTimeout(() => {
+    server.kill("SIGTERM");
+    reject(new Error("Timed out waiting for MCP HTTP server to start"));
+  }, 10_000);
   server.once("error", (err) => {
     clearTimeout(timeout);
     reject(err);
   });
+  server.once("exit", (code, signal) => {
+    clearTimeout(timeout);
+    reject(new Error(`MCP HTTP server exited before ready (code=${code ?? "null"} signal=${signal ?? "null"})`));
+  });
   server.stderr.setEncoding("utf8");
+  let stderrBuffer = "";
   server.stderr.on("data", (chunk: string) => {
-    const match = chunk.match(/MCP Streamable HTTP listening on (http:\/\/\S+)/);
+    stderrBuffer += chunk;
+    process.stderr.write(chunk);
+    const match = stderrBuffer.match(/MCP Streamable HTTP listening on (http:\/\/\S+)/);
     if (match?.[1]) {
       clearTimeout(timeout);
       resolve(new URL(match[1]));

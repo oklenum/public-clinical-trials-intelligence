@@ -102,7 +102,7 @@ Compared to “traditional RAG” or bespoke plugins, MCP makes it easier to:
 ## 7) Installation 🧰
 
 ```bash
-git clone https://github.com/<OWNER>/public-clinical-trials-intelligence.git
+git clone <THIS_REPOSITORY_URL>
 cd public-clinical-trials-intelligence
 npm ci
 ```

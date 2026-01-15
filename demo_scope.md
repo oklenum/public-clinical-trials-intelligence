@@ -14,7 +14,7 @@ This demo shows an MCP server that gives an LLM **structured, auditable access**
 
 ## Explicit non-goals
 
-- No internal/proprietary data sources (e.g., Lundbeck systems) and no authentication-required datasets.
+- No internal/proprietary data sources and no authentication-required datasets.
 - No patient-level data, re-identification risk, or linkage to private datasets.
 - No clinical, medical, regulatory, or strategic conclusions; the demo reports structured facts only.
 - No predictive analytics (e.g., success likelihood, efficacy inference, competitive outcome forecasting).
