@@ -8,6 +8,8 @@ type ToolSchemaDef = {
 };
 
 export type ToolSchemasFile = {
+  $schema?: string;
+  $defs?: Record<string, unknown>;
   schema_version?: string;
   tools: Record<string, ToolSchemaDef>;
 };
@@ -34,4 +36,3 @@ export function getToolList(schemas: ToolSchemasFile) {
     inputSchema: def.input_schema,
   }));
 }
-

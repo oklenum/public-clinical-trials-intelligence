@@ -6,6 +6,7 @@ import http from "node:http";
 import { performance } from "node:perf_hooks";
 
 import { getToolList, loadToolSchemas } from "./toolSchemas.js";
+import { createToolArgumentsValidator } from "./toolArgumentValidation.js";
 import {
   tool_aggregate_trials,
   tool_compare_trials,
@@ -19,6 +20,7 @@ import type { Err } from "../adapters/http.js";
 import { formatToolInvocationLogLine, summarizeToolResultForLog } from "../utils/toolLogging.js";
 
 const { schemas } = await loadToolSchemas();
+const validateToolArguments = createToolArgumentsValidator(schemas);
 
 const server = new Server(
   { name: "public-clinical-trials-intelligence", version: "0.1.0" },
@@ -50,24 +52,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
-  const args = (request.params.arguments ?? {}) as any;
+  const args = request.params.arguments ?? {};
+
+  const validation = validateToolArguments(toolName, args);
+  if (!validation.ok) {
+    const durationMs = performance.now() - startedAt;
+    const responseText = [
+      validation.error.message,
+      ...validation.error.issues.map((issue) => `- ${issue.path}: ${issue.message}`),
+    ].join("\n");
+    const resultBytes = Buffer.byteLength(responseText, "utf8");
+
+    console.error(
+      formatToolInvocationLogLine({
+        toolName,
+        args,
+        durationMs,
+        resultBytes,
+        resultSummary: `error code=INVALID_ARGUMENTS issues=${validation.error.issues.length}`,
+      }),
+    );
+
+    return {
+      isError: true,
+      content: [{ type: "text", text: responseText }],
+    };
+  }
 
   try {
     const output =
       toolName === "search_trials"
-        ? await tool_search_trials(args)
+        ? await tool_search_trials(validation.value as any)
         : toolName === "get_trial"
-          ? await tool_get_trial(args)
+          ? await tool_get_trial(validation.value as any)
           : toolName === "get_trial_details"
-            ? await tool_get_trial_details(args)
+            ? await tool_get_trial_details(validation.value as any)
             : toolName === "get_trial_endpoints"
-              ? await tool_get_trial_endpoints(args)
+              ? await tool_get_trial_endpoints(validation.value as any)
               : toolName === "compare_trials"
-                ? await tool_compare_trials(args)
+                ? await tool_compare_trials(validation.value as any)
                 : toolName === "aggregate_trials"
-                  ? await tool_aggregate_trials(args)
+                  ? await tool_aggregate_trials(validation.value as any)
                   : toolName === "search_pubmed"
-                    ? await tool_search_pubmed(args)
+                    ? await tool_search_pubmed(validation.value as any)
                     : ({
                         ok: false,
                         error: { code: "INTERNAL_ERROR", retryable: false, context: { tool: toolName } },
