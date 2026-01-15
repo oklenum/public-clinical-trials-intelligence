@@ -12,6 +12,7 @@ const search = await searchTrials({
 });
 
 console.log("searchTrials:", JSON.stringify(search, null, 2));
+if (!search.ok) process.exitCode = 1;
 
 const searchAgain = await searchTrials({
   filters: {
@@ -22,6 +23,7 @@ const searchAgain = await searchTrials({
 });
 
 console.log("searchTrials (again):", JSON.stringify(searchAgain, null, 2));
+if (!searchAgain.ok) process.exitCode = 1;
 console.log("cache(after):", JSON.stringify(getFetchJsonCacheStatus(), null, 2));
 
 if (search.ok && search.data.trials[0]?.nct_id) {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { getTrial, searchTrials } from "../../src/adapters/clinicaltrialsGovAdapter.js";
+import { searchPubmed } from "../../src/adapters/pubmedAdapter.js";
 import { tool_aggregate_trials } from "../../src/dataAdapter.js";
 
 function jsonResponse(body: unknown, { status = 200, headers = {} }: { status?: number; headers?: Record<string, string> } = {}) {
@@ -108,3 +109,61 @@ test("no results found: aggregate_trials does not loop on empty pages with a nex
   }
 });
 
+test("happy path: search_trials normalizes a minimal trial summary", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (input: any) => {
+      const url = new URL(String(input));
+      if (url.hostname === "clinicaltrials.gov" && url.pathname === "/api/v2/studies") {
+        return jsonResponse({
+          studies: [
+            {
+              protocolSection: {
+                identificationModule: { nctId: "NCT00000002", briefTitle: "Example Trial" },
+                statusModule: { overallStatus: "RECRUITING", lastUpdatePostDateStruct: { date: "2024-01-02" } },
+                designModule: { phases: ["PHASE3"], studyType: "INTERVENTIONAL", enrollmentInfo: { count: 123, type: "ESTIMATED" } },
+                sponsorCollaboratorsModule: { leadSponsor: { name: "Example Sponsor", class: "INDUSTRY" } },
+              },
+            },
+          ],
+          nextPageToken: "next",
+        });
+      }
+      throw new Error(`Unexpected fetch url: ${url.toString()}`);
+    };
+
+    const result = await searchTrials(
+      { filters: { indication: "diabetes" }, page_size: 1, sort: { field: "LAST_UPDATE_POSTED", direction: "DESC" } },
+      { timeoutMs: 50 },
+    );
+    assert.equal(result.ok, true);
+    assert.equal(result.data.trials.length, 1);
+    assert.equal(result.data.trials[0]?.nct_id, "NCT00000002");
+    assert.equal(result.data.trials[0]?.brief_title, "Example Trial");
+    assert.equal(result.data.trials[0]?.overall_status, "RECRUITING");
+    assert.equal(result.data.page.page_size, 1);
+    assert.equal(result.data.page.next_page_token, "next");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("happy path: search_pubmed returns ok with empty citations on no matches", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (input: any) => {
+      const url = new URL(String(input));
+      if (url.hostname === "eutils.ncbi.nlm.nih.gov" && url.pathname.endsWith("/esearch.fcgi")) {
+        return jsonResponse({ esearchresult: { idlist: [] } });
+      }
+      throw new Error(`Unexpected fetch url: ${url.toString()}`);
+    };
+
+    const result = await searchPubmed({ nct_id: "NCT00000001", retmax: 5, sort: "RELEVANCE" }, { timeoutMs: 50 });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.data.citations, []);
+    assert.ok(result.data.query_used?.term.includes("NCT00000001"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
