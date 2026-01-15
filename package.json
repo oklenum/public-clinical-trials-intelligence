@@ -7,9 +7,17 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "mcp:server": "npm run -s build && node dist/src/mcp/server.js",
+    "mcp:server:http": "npm run -s build && MCP_TRANSPORT=streamable-http node dist/src/mcp/server.js",
+    "smoke:mcp": "npm run -s build && node dist/scripts/smoke_mcp_server.js",
+    "smoke:mcp:http": "npm run -s build && node dist/scripts/smoke_mcp_http.js",
     "smoke:ctgov": "npm run -s build && node dist/scripts/smoke_clinicaltrials_gov.js"
   },
   "devDependencies": {
+    "@types/node": "^25.0.8",
     "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2"
   }
 }
