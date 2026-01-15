@@ -10,3 +10,10 @@ This demo MCP server exposes a small, stable set of **non-overlapping** tools fo
 | `aggregate_trials` | Compute grouped summaries over a query result set (e.g., counts by phase/status/sponsor, top-N sponsors, recent postings/updates) using explicit `group_by` fields and metrics. | “Get distributions and leaderboards from trial search results (counts, breakdowns, recency).” |
 | `search_pubmed` | Search PubMed for citations related to an NCT ID or topic and return bibliographic metadata (e.g., PMID, title, journal, year, DOI) without interpretation. | “Find related publications to support follow-up reading while keeping the demo grounded in public metadata.” |
 
+## Defaults and Limits
+
+### `search_trials`
+
+- **Filters:** `indication`, `phases`, and `overall_statuses` are applied deterministically via ClinicalTrials.gov query parameters.
+- **Pagination:** `page_size` defaults to `25` (bounded to `1..100`); use `next_page_token` from the prior response to continue.
+- **Sorting:** defaults to `LAST_UPDATE_POSTED` descending for stable ordering.

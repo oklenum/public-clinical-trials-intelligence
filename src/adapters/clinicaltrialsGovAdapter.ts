@@ -7,6 +7,9 @@ import {
 } from "./clinicaltrialsGovNormalize.js";
 
 const API_BASE = "https://clinicaltrials.gov/api/v2";
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 100;
+const DEFAULT_SORT: TrialsSort = { field: "LAST_UPDATE_POSTED", direction: "DESC" };
 
 export type TrialsSortField =
   | "RELEVANCE"
@@ -62,7 +65,7 @@ export type SearchTrialsInput = {
   page_size?: number;
   page_token?: string;
   sort?: TrialsSort;
-  include_fields?: string[];
+  include_fields?: TrialIncludeField[];
 };
 
 export type SearchTrialsOutput = Ok<{
@@ -73,10 +76,71 @@ export type SearchTrialsOutput = Ok<{
 export type GetTrialInput = { nct_id: string };
 export type GetTrialOutput = Ok<{ trial: FullTrialRecord }> | Err;
 
+export type TrialIncludeField =
+  | "NCT_ID"
+  | "BRIEF_TITLE"
+  | "OFFICIAL_TITLE"
+  | "ACRONYM"
+  | "OVERALL_STATUS"
+  | "PHASES"
+  | "STUDY_TYPE"
+  | "ENROLLMENT"
+  | "SPONSORS"
+  | "CONDITIONS"
+  | "INTERVENTIONS"
+  | "COUNTRIES"
+  | "FIRST_POSTED"
+  | "LAST_UPDATE_POSTED"
+  | "START_DATE"
+  | "PRIMARY_COMPLETION_DATE"
+  | "COMPLETION_DATE";
+
+const DEFAULT_INCLUDE_FIELDS: TrialIncludeField[] = [
+  "NCT_ID",
+  "BRIEF_TITLE",
+  "OVERALL_STATUS",
+  "PHASES",
+  "STUDY_TYPE",
+  "ENROLLMENT",
+  "SPONSORS",
+  "CONDITIONS",
+  "INTERVENTIONS",
+  "FIRST_POSTED",
+  "LAST_UPDATE_POSTED",
+  "START_DATE",
+  "PRIMARY_COMPLETION_DATE",
+  "COMPLETION_DATE",
+];
+
+const INCLUDE_FIELD_TO_CT_FIELDS: Record<TrialIncludeField, string[]> = {
+  NCT_ID: ["protocolSection.identificationModule.nctId"],
+  BRIEF_TITLE: ["protocolSection.identificationModule.briefTitle"],
+  OFFICIAL_TITLE: ["protocolSection.identificationModule.officialTitle"],
+  ACRONYM: ["protocolSection.identificationModule.acronym"],
+  OVERALL_STATUS: ["protocolSection.statusModule.overallStatus"],
+  PHASES: ["protocolSection.designModule.phases"],
+  STUDY_TYPE: ["protocolSection.designModule.studyType"],
+  ENROLLMENT: ["protocolSection.designModule.enrollmentInfo"],
+  SPONSORS: [
+    "protocolSection.sponsorCollaboratorsModule.leadSponsor",
+    "protocolSection.sponsorCollaboratorsModule.collaborators",
+  ],
+  CONDITIONS: ["protocolSection.conditionsModule.conditions"],
+  INTERVENTIONS: [
+    "protocolSection.armsInterventionsModule.interventions.name",
+    "protocolSection.armsInterventionsModule.armGroups.interventionNames",
+  ],
+  COUNTRIES: ["protocolSection.contactsLocationsModule.locations.country"],
+  FIRST_POSTED: ["protocolSection.statusModule.studyFirstPostDateStruct.date"],
+  LAST_UPDATE_POSTED: ["protocolSection.statusModule.lastUpdatePostDateStruct.date"],
+  START_DATE: ["protocolSection.statusModule.startDateStruct.date"],
+  PRIMARY_COMPLETION_DATE: ["protocolSection.statusModule.primaryCompletionDateStruct.date"],
+  COMPLETION_DATE: ["protocolSection.statusModule.completionDateStruct.date"],
+};
+
 function buildQueryTerm(filters: TrialsFilters | undefined): string {
   const parts: string[] = [];
-  const base = filters?.query_term ?? filters?.indication;
-  if (typeof base === "string" && base.trim()) parts.push(base.trim());
+  if (typeof filters?.query_term === "string" && filters.query_term.trim()) parts.push(filters.query_term.trim());
 
   const phases = Array.isArray(filters?.phases) ? filters.phases : [];
   if (phases.length) {
@@ -130,6 +194,7 @@ function buildQueryTerm(filters: TrialsFilters | undefined): string {
 
 function mapSort(sort: TrialsSort | undefined): string | undefined {
   if (!sort) return undefined;
+  if (sort.field === "RELEVANCE") return undefined;
   const direction = sort.direction === "ASC" ? "asc" : sort.direction === "DESC" ? "desc" : undefined;
   if (!direction) return undefined;
 
@@ -147,22 +212,32 @@ function mapSort(sort: TrialsSort | undefined): string | undefined {
 
 export async function searchTrials(input: SearchTrialsInput, { timeoutMs }: { timeoutMs?: number } = {}): Promise<SearchTrialsOutput> {
   try {
+    const indication = typeof input?.filters?.indication === "string" ? input.filters.indication.trim() : "";
     const queryTerm = buildQueryTerm(input?.filters);
-    if (!queryTerm) {
+    if (!indication && !queryTerm) {
       return { ok: false, error: { code: "INVALID_ARGUMENT", retryable: false } };
     }
 
-    const pageSize = Number.isInteger(input?.page_size) ? (input.page_size as number) : 25;
+    const pageSize = Number.isInteger(input?.page_size) ? (input.page_size as number) : DEFAULT_PAGE_SIZE;
     const url = new URL(`${API_BASE}/studies`);
-    url.searchParams.set("query.term", queryTerm);
-    url.searchParams.set("pageSize", String(Math.min(Math.max(pageSize, 1), 100)));
+    if (indication) url.searchParams.set("query.cond", indication);
+    if (queryTerm) url.searchParams.set("query.term", queryTerm);
+    url.searchParams.set("pageSize", String(Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE)));
 
     if (typeof input?.page_token === "string" && input.page_token.trim()) {
       url.searchParams.set("pageToken", input.page_token.trim());
     }
 
-    const sortParam = mapSort(input?.sort);
+    const sortParam = mapSort(input?.sort) ?? mapSort(DEFAULT_SORT);
     if (sortParam) url.searchParams.set("sort", sortParam);
+
+    const includeFields =
+      Array.isArray(input?.include_fields) && input.include_fields.length ? input.include_fields : DEFAULT_INCLUDE_FIELDS;
+    const ctFields = new Set<string>();
+    for (const field of ["NCT_ID", ...includeFields] as TrialIncludeField[]) {
+      for (const ctField of INCLUDE_FIELD_TO_CT_FIELDS[field] ?? []) ctFields.add(ctField);
+    }
+    if (ctFields.size) url.searchParams.set("fields", Array.from(ctFields).join(","));
 
     const result = await fetchJson<{ studies?: unknown[]; nextPageToken?: unknown }>(url.toString(), {
       timeoutMs,
@@ -183,7 +258,7 @@ export async function searchTrials(input: SearchTrialsInput, { timeoutMs }: { ti
       data: {
         trials,
         page: {
-          page_size: Math.min(Math.max(pageSize, 1), 100),
+          page_size: Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE),
           ...(nextPageToken ? { next_page_token: nextPageToken } : {}),
         },
       },
@@ -236,4 +311,3 @@ export async function getTrial(input: GetTrialInput, { timeoutMs }: { timeoutMs?
     };
   }
 }
-
