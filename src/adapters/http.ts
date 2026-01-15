@@ -1,3 +1,5 @@
+import { TtlCache } from "../utils/ttlCache.js";
+
 export type UpstreamService = "CLINICALTRIALS_GOV" | "PUBMED";
 
 export type ErrorCode =
@@ -30,7 +32,86 @@ export type FetchJsonOptions = {
   };
 };
 
-export async function fetchJson<T = unknown>(
+function parsePositiveInt(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+const ENV: Record<string, string | undefined> =
+  (
+    globalThis as unknown as {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process?.env ?? {};
+
+const DEFAULT_CACHE_TTL_MS = 5 * 60_000;
+const CACHE_TTL_MS = parsePositiveInt(ENV.DEMO_CACHE_TTL_MS) ?? DEFAULT_CACHE_TTL_MS;
+const CACHE_DISABLED = ENV.DEMO_CACHE_DISABLE === "1" || ENV.DEMO_CACHE_DISABLE === "true";
+const CACHE_DEBUG = ENV.DEMO_CACHE_DEBUG === "1" || ENV.DEMO_CACHE_DEBUG === "true";
+
+type CachedOk = Ok<unknown>;
+const responseCache = new TtlCache<string, CachedOk>({ defaultTtlMs: CACHE_TTL_MS });
+const inFlight = new Map<string, Promise<Ok<unknown> | Err>>();
+
+function stableHeaderPairs(headers: Record<string, string> | undefined): [string, string][] {
+  const pairs = Object.entries(headers ?? {})
+    .map(([k, v]) => [k.toLowerCase(), String(v)] as [string, string])
+    .filter(([k, v]) => k.trim() && v.trim());
+
+  pairs.sort(([aKey, aValue], [bKey, bValue]) =>
+    aKey === bKey ? aValue.localeCompare(bValue) : aKey.localeCompare(bKey),
+  );
+  return pairs;
+}
+
+function canonicalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const pairs: [string, string][] = [];
+    parsed.searchParams.forEach((value, key) => pairs.push([key, value]));
+    pairs.sort(([aKey, aValue], [bKey, bValue]) =>
+      aKey === bKey ? aValue.localeCompare(bValue) : aKey.localeCompare(bKey),
+    );
+    parsed.search = "";
+    for (const [k, v] of pairs) parsed.searchParams.append(k, v);
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+function requestSignature(url: string, headers: Record<string, string> | undefined, upstream: UpstreamService): string {
+  // Signature must be deterministic across equivalent calls.
+  return JSON.stringify({
+    url: canonicalizeUrl(url),
+    upstream,
+    headers: stableHeaderPairs({ accept: "application/json", ...(headers ?? {}) }),
+  });
+}
+
+export function clearFetchJsonCache(): void {
+  responseCache.clear();
+  inFlight.clear();
+}
+
+export function getFetchJsonCacheStatus(): {
+  disabled: boolean;
+  ttlMs: number;
+  entries: number;
+  inFlight: number;
+  stats: { hits: number; misses: number; sets: number; evictions: number };
+} {
+  return {
+    disabled: CACHE_DISABLED,
+    ttlMs: CACHE_TTL_MS,
+    entries: responseCache.size,
+    inFlight: inFlight.size,
+    stats: { ...responseCache.stats },
+  };
+}
+
+async function fetchJsonUncached<T = unknown>(
   url: string,
   { timeoutMs = 15_000, headers, upstream = { service: "CLINICALTRIALS_GOV" } }: FetchJsonOptions = {},
 ): Promise<Ok<T> | Err> {
@@ -147,3 +228,37 @@ export async function fetchJson<T = unknown>(
   }
 }
 
+export async function fetchJson<T = unknown>(
+  url: string,
+  { timeoutMs = 15_000, headers, upstream = { service: "CLINICALTRIALS_GOV" } }: FetchJsonOptions = {},
+): Promise<Ok<T> | Err> {
+  if (CACHE_DISABLED) {
+    return await fetchJsonUncached<T>(url, { timeoutMs, headers, upstream });
+  }
+
+  const key = requestSignature(url, headers, upstream.service);
+  const cached = responseCache.get(key);
+  if (cached) {
+    if (CACHE_DEBUG) console.log(`[cache hit] ${upstream.service} ${url}`);
+    return cached as Ok<T>;
+  }
+
+  const existing = inFlight.get(key);
+  if (existing) {
+    if (CACHE_DEBUG) console.log(`[cache coalesce] ${upstream.service} ${url}`);
+    return (await existing) as Ok<T> | Err;
+  }
+
+  const promise = (async (): Promise<Ok<unknown> | Err> => {
+    try {
+      return await fetchJsonUncached<unknown>(url, { timeoutMs, headers, upstream });
+    } finally {
+      inFlight.delete(key);
+    }
+  })();
+
+  inFlight.set(key, promise);
+  const result = await promise;
+  if (result.ok) responseCache.set(key, result);
+  return result as Ok<T> | Err;
+}

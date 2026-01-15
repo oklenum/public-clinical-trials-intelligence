@@ -26,3 +26,10 @@
 - `include_fields`: mapped to ClinicalTrials.gov `fields=...` to limit returned payload
 - Default when omitted: `NCT_ID`, titles, status, phases, study type, enrollment, sponsors, conditions, interventions, and key posted/date fields
 
+## Upstream Caching (Demo)
+
+All outbound JSON `GET` requests made via `fetchJson()` (`src/adapters/http.ts`) are cached **in-memory** by request signature (canonical URL + headers + upstream service).
+
+- Default TTL: `DEMO_CACHE_TTL_MS` (defaults to `5` minutes)
+- Disable caching: `DEMO_CACHE_DISABLE=1`
+- Clear cache in-process: `clearFetchJsonCache()` (process restart also clears it)

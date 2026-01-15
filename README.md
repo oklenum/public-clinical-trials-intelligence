@@ -126,6 +126,15 @@ The demo is successful if:
 
 ---
 
+## Demo Caching (Minimal)
+
+To reduce latency and avoid upstream rate limits during demos, outbound JSON `GET` requests made via `src/adapters/http.ts` are cached **in-memory** by request signature (canonical URL + headers + upstream service).
+
+- Default TTL: `5` minutes (override with `DEMO_CACHE_TTL_MS`)
+- Disable caching: `DEMO_CACHE_DISABLE=1`
+- Log cache hits/coalescing: `DEMO_CACHE_DEBUG=1`
+- Clear cache in-process: call `clearFetchJsonCache()` from `src/adapters/http.ts` (restarting the process also clears it)
+
 ## Future Extension (Not Implemented)
 
 In a real internal deployment, the same MCP interface could:
