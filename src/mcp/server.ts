@@ -5,6 +5,16 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import http from "node:http";
 
 import { getToolList, loadToolSchemas } from "./toolSchemas.js";
+import {
+  tool_aggregate_trials,
+  tool_compare_trials,
+  tool_get_trial,
+  tool_get_trial_details,
+  tool_get_trial_endpoints,
+  tool_search_pubmed,
+  tool_search_trials,
+} from "../dataAdapter.js";
+import type { Err } from "../adapters/http.js";
 
 const { schemas } = await loadToolSchemas();
 
@@ -27,10 +37,48 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
-  return {
-    isError: true,
-    content: [{ type: "text", text: `Tool '${toolName}' is registered but not implemented.` }],
-  };
+  const args = (request.params.arguments ?? {}) as any;
+
+  try {
+    const output =
+      toolName === "search_trials"
+        ? await tool_search_trials(args)
+        : toolName === "get_trial"
+          ? await tool_get_trial(args)
+          : toolName === "get_trial_details"
+            ? await tool_get_trial_details(args)
+            : toolName === "get_trial_endpoints"
+              ? await tool_get_trial_endpoints(args)
+              : toolName === "compare_trials"
+                ? await tool_compare_trials(args)
+                : toolName === "aggregate_trials"
+                  ? await tool_aggregate_trials(args)
+                  : toolName === "search_pubmed"
+                    ? await tool_search_pubmed(args)
+                    : ({
+                        ok: false,
+                        error: { code: "INTERNAL_ERROR", retryable: false, context: { tool: toolName } },
+                      } satisfies Err);
+
+    return {
+      isError: false,
+      content: [{ type: "text", text: JSON.stringify(output) }],
+    };
+  } catch (error) {
+    const fallback: Err = {
+      ok: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        retryable: false,
+        context: { error: error instanceof Error ? error.message : String(error), tool: toolName },
+      },
+    };
+
+    return {
+      isError: false,
+      content: [{ type: "text", text: JSON.stringify(fallback) }],
+    };
+  }
 });
 
 async function startStdio() {

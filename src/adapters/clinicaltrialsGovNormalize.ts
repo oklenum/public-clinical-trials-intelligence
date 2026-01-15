@@ -1,5 +1,6 @@
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const NCT_ID_RE = /^NCT\d{8}$/;
+const ISO_COUNTRY_CODE_RE = /^[A-Z]{2}$/;
 
 type JsonObject = Record<string, unknown>;
 
@@ -21,6 +22,70 @@ function uniqueStrings(values: unknown): string[] {
     seen.add(v);
     out.push(v);
   }
+  return out;
+}
+
+function normalizeCountryName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[().,']/g, "")
+    .replace(/\s+/g, " ");
+}
+
+let countryNameToCodeCache: Map<string, string> | undefined;
+
+function getCountryNameToCodeMap(): Map<string, string> {
+  if (countryNameToCodeCache) return countryNameToCodeCache;
+  const map = new Map<string, string>();
+
+  const supportedValuesOf = (Intl as any).supportedValuesOf as undefined | ((key: string) => string[]);
+  const displayNames = (Intl as any).DisplayNames as
+    | undefined
+    | (new (locales: string[], options: { type: string }) => { of(code: string): string | undefined });
+
+  if (typeof supportedValuesOf === "function" && typeof displayNames === "function") {
+    try {
+      const display = new displayNames(["en"], { type: "region" });
+      for (const code of supportedValuesOf("region")) {
+        if (!ISO_COUNTRY_CODE_RE.test(code)) continue;
+        const name = display.of(code);
+        if (!name) continue;
+        map.set(normalizeCountryName(name), code);
+      }
+    } catch {
+      // Older runtimes may not support `Intl.supportedValuesOf('region')`.
+    }
+  }
+
+  // Minimal fallbacks for older runtimes / edge cases.
+  map.set(normalizeCountryName("United States"), "US");
+  map.set(normalizeCountryName("United Kingdom"), "GB");
+  map.set(normalizeCountryName("Korea, Republic of"), "KR");
+  map.set(normalizeCountryName("Russian Federation"), "RU");
+
+  countryNameToCodeCache = map;
+  return map;
+}
+
+function normalizeCountries(contactsLocationsModule: unknown): Array<{ code: string; name?: string }> {
+  const obj = (contactsLocationsModule ?? {}) as JsonObject;
+  const locations = asArray(obj.locations);
+  const nameToCode = getCountryNameToCodeMap();
+
+  const seen = new Set<string>();
+  const out: Array<{ code: string; name?: string }> = [];
+
+  for (const loc of locations) {
+    const countryName = asNonEmptyString(((loc ?? {}) as JsonObject).country);
+    if (!countryName) continue;
+    const code = nameToCode.get(normalizeCountryName(countryName));
+    if (!code) continue;
+    if (seen.has(code)) continue;
+    seen.add(code);
+    out.push({ code, name: countryName });
+  }
+
   return out;
 }
 
@@ -306,6 +371,7 @@ export type TrialSummary = {
   collaborators?: ReturnType<typeof normalizeSponsors>["collaborators"];
   conditions?: string[];
   interventions?: string[];
+  countries?: ReturnType<typeof normalizeCountries>;
   first_posted?: string;
   last_update_posted?: string;
   start_date?: string;
@@ -334,6 +400,7 @@ export type FullTrialRecord = {
   arms?: ReturnType<typeof normalizeArms>;
   eligibility?: ReturnType<typeof normalizeEligibility>;
   outcomes?: ReturnType<typeof normalizeOutcomes>;
+  countries?: ReturnType<typeof normalizeCountries>;
   source: { registry: "CLINICALTRIALS_GOV"; api_version?: string };
 };
 
@@ -356,6 +423,7 @@ export function normalizeTrialSummaryFromStudy(study: unknown): TrialSummary | u
 
   const conditions = uniqueStrings((protocol.conditionsModule as any)?.conditions);
   const interventions = normalizeInterventions(protocol.armsInterventionsModule);
+  const countries = normalizeCountries(protocol.contactsLocationsModule);
 
   const phases = uniqueStrings(design.phases).map(normalizePhase).filter(Boolean) as any;
 
@@ -381,6 +449,7 @@ export function normalizeTrialSummaryFromStudy(study: unknown): TrialSummary | u
     ...(sponsors.collaborators.length ? { collaborators: sponsors.collaborators } : {}),
     ...(conditions.length ? { conditions } : {}),
     ...(interventions.length ? { interventions } : {}),
+    ...(countries.length ? { countries } : {}),
     ...(firstPosted ? { first_posted: firstPosted } : {}),
     ...(lastUpdatePosted ? { last_update_posted: lastUpdatePosted } : {}),
     ...(startDate ? { start_date: startDate } : {}),
@@ -404,6 +473,7 @@ export function normalizeFullTrialRecordFromStudy(study: unknown): FullTrialReco
   const eligibility = normalizeEligibility(protocol.eligibilityModule);
   const studyDesign = normalizeStudyDesign((design as any).designInfo);
   const apiVersion = asNonEmptyString(((s.derivedSection as any)?.miscInfoModule as any)?.versionHolder);
+  const countries = normalizeCountries(protocol.contactsLocationsModule);
 
   return {
     nct_id: summary.nct_id,
@@ -426,10 +496,10 @@ export function normalizeFullTrialRecordFromStudy(study: unknown): FullTrialReco
     ...(arms.length ? { arms } : {}),
     ...(eligibility ? { eligibility } : {}),
     ...(outcomes.length ? { outcomes } : {}),
+    ...(countries.length ? { countries } : {}),
     source: {
       registry: "CLINICALTRIALS_GOV",
       ...(apiVersion ? { api_version: apiVersion } : {}),
     },
   };
 }
-
