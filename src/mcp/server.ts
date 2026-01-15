@@ -3,6 +3,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import http from "node:http";
+import { performance } from "node:perf_hooks";
 
 import { getToolList, loadToolSchemas } from "./toolSchemas.js";
 import {
@@ -15,6 +16,7 @@ import {
   tool_search_trials,
 } from "../dataAdapter.js";
 import type { Err } from "../adapters/http.js";
+import { formatToolInvocationLogLine, summarizeToolResultForLog } from "../utils/toolLogging.js";
 
 const { schemas } = await loadToolSchemas();
 
@@ -29,8 +31,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const toolName = request.params.name;
+  const startedAt = performance.now();
 
   if (!Object.prototype.hasOwnProperty.call(schemas.tools, toolName)) {
+    const durationMs = performance.now() - startedAt;
+    console.error(
+      formatToolInvocationLogLine({
+        toolName,
+        args: request.params.arguments ?? {},
+        durationMs,
+        resultBytes: 0,
+        resultSummary: "error code=UNKNOWN_TOOL",
+      }),
+    );
     return {
       isError: true,
       content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
@@ -60,9 +73,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                         error: { code: "INTERNAL_ERROR", retryable: false, context: { tool: toolName } },
                       } satisfies Err);
 
+    const responseText = JSON.stringify(output);
+    const durationMs = performance.now() - startedAt;
+    const resultBytes = Buffer.byteLength(responseText, "utf8");
+    console.error(
+      formatToolInvocationLogLine({
+        toolName,
+        args,
+        durationMs,
+        resultBytes,
+        resultSummary: summarizeToolResultForLog(output),
+      }),
+    );
+
     return {
       isError: false,
-      content: [{ type: "text", text: JSON.stringify(output) }],
+      content: [{ type: "text", text: responseText }],
     };
   } catch (error) {
     const fallback: Err = {
@@ -74,9 +100,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       },
     };
 
+    const responseText = JSON.stringify(fallback);
+    const durationMs = performance.now() - startedAt;
+    const resultBytes = Buffer.byteLength(responseText, "utf8");
+    console.error(
+      formatToolInvocationLogLine({
+        toolName,
+        args,
+        durationMs,
+        resultBytes,
+        resultSummary: summarizeToolResultForLog(fallback),
+      }),
+    );
+
     return {
       isError: false,
-      content: [{ type: "text", text: JSON.stringify(fallback) }],
+      content: [{ type: "text", text: responseText }],
     };
   }
 });
