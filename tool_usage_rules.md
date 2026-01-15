@@ -55,6 +55,8 @@ These rules constrain when the LLM must use tools, when it must refuse, and how 
 ## 6) Predictable Answer Format
 
 1. When an answer depends on tools, the LLM must:
-   - State which tool(s) it used (by name).
-   - Separate observed facts (from tool output) from assumptions and recommendations.
+   - Include a “Provenance” section listing each tool used (by name) and the key fields used from its output (JSON paths).
+   - Include a short “Data source” section mapping tools to upstream sources (e.g., ClinicalTrials.gov, PubMed).
+   - Include an “Evidence” section with verbatim tool output snippets that support the factual claims.
+   - Separate observed facts (from tool output) from assumptions and recommendations (and avoid assumptions when possible).
 2. When an answer does not depend on tools, the LLM must explicitly avoid implying verification (it must not say “confirmed”, “verified”, “tested”, “ran”).
