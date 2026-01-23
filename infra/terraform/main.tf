@@ -26,6 +26,18 @@ resource "azurerm_log_analytics_workspace" "law" {
   retention_in_days   = 30
 }
 
+resource "azurerm_user_assigned_identity" "acr_pull" {
+  name                = "uai-${var.container_app_name}-acr-pull"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_role_assignment" "acr_pull" {
+  scope                = azurerm_container_registry.acr.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_user_assigned_identity.acr_pull.principal_id
+}
+
 resource "azurerm_container_app_environment" "env" {
   name                       = "cae-${var.container_app_name}"
   location                   = azurerm_resource_group.rg.location
@@ -40,20 +52,24 @@ resource "azurerm_container_app" "app" {
   revision_mode                = "Single"
 
   identity {
-    type = "SystemAssigned"
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.acr_pull.id]
   }
 
   registry {
     server   = azurerm_container_registry.acr.login_server
-    identity = "System" # use the system-assigned managed identity
+    identity = azurerm_user_assigned_identity.acr_pull.id
   }
+
+  depends_on = [azurerm_role_assignment.acr_pull]
 
   ingress {
     external_enabled = var.ingress_external
     target_port      = var.container_port
     transport        = "auto"
+
     traffic_weight {
-      percentage = 100
+      percentage      = 100
       latest_revision = true
     }
   }
@@ -84,8 +100,4 @@ resource "azurerm_container_app" "app" {
   }
 }
 
-resource "azurerm_role_assignment" "acr_pull" {
-  scope                = azurerm_container_registry.acr.id
-  role_definition_name = "AcrPull"
-  principal_id         = azurerm_container_app.app.identity[0].principal_id
-}
+
