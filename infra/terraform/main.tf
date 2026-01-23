@@ -36,7 +36,6 @@ resource "azurerm_container_app_environment" "env" {
 resource "azurerm_container_app" "app" {
   name                         = var.container_app_name
   resource_group_name          = azurerm_resource_group.rg.name
-  location                     = azurerm_resource_group.rg.location
   container_app_environment_id = azurerm_container_app_environment.env.id
   revision_mode                = "Single"
 
@@ -53,6 +52,10 @@ resource "azurerm_container_app" "app" {
     external_enabled = var.ingress_external
     target_port      = var.container_port
     transport        = "auto"
+    traffic_weight {
+      percentage = 100
+      latest_revision = true
+    }
   }
 
   template {

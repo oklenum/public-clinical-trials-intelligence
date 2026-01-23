@@ -18,7 +18,7 @@ variable "resource_group_name" {
 variable "acr_name" {
   description = "Azure Container Registry name (3-50 lowercase alphanumerics)"
   type        = string
-  default     = "acr-olbi-registry"
+  default     = "acrolbiregistry"
 }
 
 variable "container_app_name" {
