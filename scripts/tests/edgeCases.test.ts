@@ -85,6 +85,114 @@ test("ambiguous indications: adapter encodes query.cond and query.term and does 
   }
 });
 
+test("truncates excessive phases/statuses/countries to avoid runaway URLs", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (input: any) => {
+      const url = new URL(String(input));
+      if (url.hostname === "clinicaltrials.gov" && url.pathname === "/api/v2/studies") {
+        assert.equal(url.searchParams.get("query.term"), "");
+        return jsonResponse({ studies: [] });
+      }
+      throw new Error(`Unexpected fetch url: ${url.toString()}`);
+    };
+
+    const many = Array.from({ length: 60 }, (_, i) => `X${i}`);
+    const result = await searchTrials(
+      {
+        filters: {
+          phases: many as any,
+          overall_statuses: many as any,
+          countries: many,
+        },
+      },
+      { timeoutMs: 50 },
+    );
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "INVALID_ARGUMENT");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("encodes sponsor, dates, and countries into query.term", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (input: any) => {
+      const url = new URL(String(input));
+      if (url.hostname === "clinicaltrials.gov" && url.pathname === "/api/v2/studies") {
+        assert.equal(url.searchParams.get("query.cond"), null);
+        const term = url.searchParams.get("query.term");
+        assert.ok(term?.includes("AREA[SponsorCollaborators]Lundbeck"));
+        assert.ok(term?.includes("AREA[LastUpdatePostDate]RANGE[2024-01-01,2024-12-31]"));
+        assert.ok(term?.includes("AREA[StudyFirstPostDate]RANGE[2023-01-01,]"));
+        assert.ok(term?.includes("AREA[StartDate]RANGE[2022-01-01,2022-12-31]"));
+        assert.ok(term?.includes("AREA[PrimaryCompletionDate]RANGE[,2025-06-30]"));
+        assert.ok(term?.includes("AREA[CompletionDate]RANGE[2025-07-01,]"));
+        assert.ok(term?.includes("AREA[LocationCountry]US"));
+        assert.ok(term?.includes("AREA[LocationCountry]DK"));
+        return jsonResponse({ studies: [] });
+      }
+      throw new Error(`Unexpected fetch url: ${url.toString()}`);
+    };
+
+    const result = await searchTrials(
+      {
+        filters: {
+          sponsor_or_collaborator: "  Lundbeck  ",
+          last_update_posted_from: "2024-01-01",
+          last_update_posted_to: "2024-12-31",
+          first_posted_from: "2023-01-01",
+          start_date_from: "2022-01-01",
+          start_date_to: "2022-12-31",
+          primary_completion_date_to: "2025-06-30",
+          completion_date_from: "2025-07-01",
+          countries: ["us", "DK", ""],
+        },
+      },
+      { timeoutMs: 50 },
+    );
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.data.trials, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("partial ranges emit open-ended RANGE tokens", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (input: any) => {
+      const url = new URL(String(input));
+      if (url.hostname === "clinicaltrials.gov" && url.pathname === "/api/v2/studies") {
+        const term = url.searchParams.get("query.term") ?? "";
+        assert.ok(term.includes("AREA[LastUpdatePostDate]RANGE[,2024-12-31]"));
+        assert.ok(term.includes("AREA[StudyFirstPostDate]RANGE[2023-01-01,]"));
+        assert.ok(term.includes("AREA[StartDate]RANGE[,2022-12-31]"));
+        assert.ok(term.includes("AREA[CompletionDate]RANGE[2025-07-01,]"));
+        return jsonResponse({ studies: [] });
+      }
+      throw new Error(`Unexpected fetch url: ${url.toString()}`);
+    };
+
+    const result = await searchTrials(
+      {
+        filters: {
+          last_update_posted_to: "2024-12-31",
+          first_posted_from: "2023-01-01",
+          start_date_to: "2022-12-31",
+          completion_date_from: "2025-07-01",
+        },
+      },
+      { timeoutMs: 50 },
+    );
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.data.trials, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("no results found: aggregate_trials does not loop on empty pages with a nextPageToken", async () => {
   const originalFetch = globalThis.fetch;
   try {

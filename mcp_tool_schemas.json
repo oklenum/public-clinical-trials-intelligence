@@ -142,6 +142,24 @@
         },
         "last_update_posted_to": {
           "$ref": "#/$defs/IsoDate"
+        },
+        "start_date_from": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "start_date_to": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "primary_completion_date_from": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "primary_completion_date_to": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "completion_date_from": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "completion_date_to": {
+          "$ref": "#/$defs/IsoDate"
         }
       }
     },

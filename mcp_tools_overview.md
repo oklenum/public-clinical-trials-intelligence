@@ -14,6 +14,6 @@ This demo MCP server exposes a small, stable set of **non-overlapping** tools fo
 
 ### `search_trials`
 
-- **Filters:** `indication`, `phases`, and `overall_statuses` are applied deterministically via ClinicalTrials.gov query parameters.
+- **Filters:** `indication` → `query.cond`; `query_term` → free term; `phases`, `overall_statuses`, `study_type`, `sponsor_or_collaborator`, `countries`, `first_posted_from/to`, `last_update_posted_from/to`, `start_date_from/to`, `primary_completion_date_from/to`, `completion_date_from/to` encode to ClinicalTrials.gov `AREA[...]` filters (dates as `RANGE[from,to]`).
 - **Pagination:** `page_size` defaults to `25` (bounded to `1..100`); use `next_page_token` from the prior response to continue.
 - **Sorting:** defaults to `LAST_UPDATE_POSTED` descending for stable ordering.

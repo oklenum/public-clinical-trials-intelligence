@@ -58,6 +58,12 @@ export type TrialsFilters = {
   first_posted_to?: string;
   last_update_posted_from?: string;
   last_update_posted_to?: string;
+  start_date_from?: string;
+  start_date_to?: string;
+  primary_completion_date_from?: string;
+  primary_completion_date_to?: string;
+  completion_date_from?: string;
+  completion_date_to?: string;
 };
 
 export type SearchTrialsInput = {
@@ -138,11 +144,35 @@ const INCLUDE_FIELD_TO_CT_FIELDS: Record<TrialIncludeField, string[]> = {
   COMPLETION_DATE: ["protocolSection.statusModule.completionDateStruct.date"],
 };
 
-function buildQueryTerm(filters: TrialsFilters | undefined): string {
+function normalizeCountry(code: string | undefined): string | undefined {
+  if (typeof code !== "string") return undefined;
+  const trimmed = code.trim();
+  if (!trimmed) return undefined;
+  return trimmed.toUpperCase();
+}
+
+function normalizeTerm(term: string | undefined): string | undefined {
+  if (typeof term !== "string") return undefined;
+  const trimmed = term.trim();
+  return trimmed || undefined;
+}
+
+function asRange(from?: string, to?: string): string | undefined {
+  const start = normalizeTerm(from);
+  const end = normalizeTerm(to);
+  if (!start && !end) return undefined;
+  return `RANGE[${start ?? ""},${end ?? ""}]`;
+}
+
+type BuiltQueryTerm = { term: string; rejected: boolean };
+
+function buildQueryTerm(filters: TrialsFilters | undefined): BuiltQueryTerm {
   const parts: string[] = [];
-  if (typeof filters?.query_term === "string" && filters.query_term.trim()) parts.push(filters.query_term.trim());
+  const userTerm = normalizeTerm(filters?.query_term);
+  if (userTerm) parts.push(userTerm);
 
   const phases = Array.isArray(filters?.phases) ? filters.phases : [];
+  if (phases.length > 20) return { term: "", rejected: true };
   if (phases.length) {
     const phaseTokens = phases
       .flatMap((p) => {
@@ -174,6 +204,7 @@ function buildQueryTerm(filters: TrialsFilters | undefined): string {
   }
 
   const statuses = Array.isArray(filters?.overall_statuses) ? filters.overall_statuses : [];
+  if (statuses.length > 20) return { term: "", rejected: true };
   if (statuses.length) {
     parts.push(`(${statuses.map((s) => `AREA[OverallStatus]${s}`).join(" OR ")})`);
   }
@@ -182,14 +213,35 @@ function buildQueryTerm(filters: TrialsFilters | undefined): string {
     parts.push(`AREA[StudyType]${filters.study_type}`);
   }
 
-  if (typeof filters?.sponsor_or_collaborator === "string" && filters.sponsor_or_collaborator.trim()) {
-    parts.push(filters.sponsor_or_collaborator.trim());
+  const sponsor = normalizeTerm(filters?.sponsor_or_collaborator);
+  if (sponsor) {
+    parts.push(`AREA[SponsorCollaborators]${sponsor}`);
   }
 
-  // Note: date ranges and country filters are intentionally omitted here; the adapter
-  // remains a thin access layer and only uses stable, validated query primitives.
+  const lastUpdateRange = asRange(filters?.last_update_posted_from, filters?.last_update_posted_to);
+  if (lastUpdateRange) parts.push(`AREA[LastUpdatePostDate]${lastUpdateRange}`);
 
-  return parts.join(" AND ");
+  const firstPostedRange = asRange(filters?.first_posted_from, filters?.first_posted_to);
+  if (firstPostedRange) parts.push(`AREA[StudyFirstPostDate]${firstPostedRange}`);
+
+  const startDateRange = asRange(filters?.start_date_from, filters?.start_date_to);
+  if (startDateRange) parts.push(`AREA[StartDate]${startDateRange}`);
+
+  const primaryCompletionRange = asRange(filters?.primary_completion_date_from, filters?.primary_completion_date_to);
+  if (primaryCompletionRange) parts.push(`AREA[PrimaryCompletionDate]${primaryCompletionRange}`);
+
+  const completionRange = asRange(filters?.completion_date_from, filters?.completion_date_to);
+  if (completionRange) parts.push(`AREA[CompletionDate]${completionRange}`);
+
+  const countries = Array.isArray(filters?.countries)
+    ? filters.countries.map((c) => normalizeCountry(c)).filter(Boolean)
+    : [];
+  if (countries.length > 50) return { term: "", rejected: true };
+  if (countries.length) {
+    parts.push(`(${countries.map((c) => `AREA[LocationCountry]${c}`).join(" OR ")})`);
+  }
+
+  return { term: parts.join(" AND "), rejected: false };
 }
 
 function mapSort(sort: TrialsSort | undefined): string | undefined {
@@ -213,8 +265,8 @@ function mapSort(sort: TrialsSort | undefined): string | undefined {
 export async function searchTrials(input: SearchTrialsInput, { timeoutMs }: { timeoutMs?: number } = {}): Promise<SearchTrialsOutput> {
   try {
     const indication = typeof input?.filters?.indication === "string" ? input.filters.indication.trim() : "";
-    const queryTerm = buildQueryTerm(input?.filters);
-    if (!indication && !queryTerm) {
+    const { term: queryTerm, rejected } = buildQueryTerm(input?.filters);
+    if (rejected || (!indication && !queryTerm)) {
       return { ok: false, error: { code: "INVALID_ARGUMENT", retryable: false } };
     }
 
