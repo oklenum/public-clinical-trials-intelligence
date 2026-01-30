@@ -49,21 +49,35 @@ export type StudyType = "INTERVENTIONAL" | "OBSERVATIONAL" | "EXPANDED_ACCESS";
 export type TrialsFilters = {
   indication?: string;
   query_term?: string;
+  query?: string;
+  q?: string;
   phases?: Phase[];
+  phase?: Phase[] | Phase;
   overall_statuses?: OverallStatus[];
+  status?: OverallStatus[] | OverallStatus;
   study_type?: StudyType;
   sponsor_or_collaborator?: string;
+  sponsor?: string;
+  lead_sponsor?: string;
+  collaborator?: string;
   countries?: string[];
+  country?: string | string[];
+  location_country?: string | string[];
   first_posted_from?: string;
   first_posted_to?: string;
+  first_posted_year?: number | string;
   last_update_posted_from?: string;
   last_update_posted_to?: string;
+  last_update_posted_year?: number | string;
   start_date_from?: string;
   start_date_to?: string;
+  start_date_year?: number | string;
   primary_completion_date_from?: string;
   primary_completion_date_to?: string;
+  primary_completion_date_year?: number | string;
   completion_date_from?: string;
   completion_date_to?: string;
+  completion_date_year?: number | string;
 };
 
 export type SearchTrialsInput = {
@@ -157,91 +171,161 @@ function normalizeTerm(term: string | undefined): string | undefined {
   return trimmed || undefined;
 }
 
-function asRange(from?: string, to?: string): string | undefined {
-  const start = normalizeTerm(from);
-  const end = normalizeTerm(to);
-  if (!start && !end) return undefined;
-  return `RANGE[${start ?? ""},${end ?? ""}]`;
+function normalizeLocationTerm(term: string | undefined): string | undefined {
+  if (typeof term !== "string") return undefined;
+  const trimmed = term.trim();
+  if (!trimmed) return undefined;
+  if (/^[A-Za-z]{2}$/.test(trimmed)) return trimmed.toUpperCase();
+  return trimmed;
 }
 
-type BuiltQueryTerm = { term: string; rejected: boolean };
+function normalizeYear(value: unknown): number | undefined {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number.parseInt(value.trim(), 10)
+        : NaN;
+  if (!Number.isInteger(parsed)) return undefined;
+  if (parsed < 1800 || parsed > 2100) return undefined;
+  return parsed;
+}
 
-function buildQueryTerm(filters: TrialsFilters | undefined): BuiltQueryTerm {
-  const parts: string[] = [];
-  const userTerm = normalizeTerm(filters?.query_term);
-  if (userTerm) parts.push(userTerm);
+function closedRange(from?: string, to?: string): string | undefined {
+  const start = normalizeTerm(from) ?? normalizeTerm(to);
+  const end = normalizeTerm(to) ?? normalizeTerm(from);
+  if (!start || !end) return undefined;
+  return `RANGE[${start},${end}]`;
+}
 
-  const phases = Array.isArray(filters?.phases) ? filters.phases : [];
-  if (phases.length > 20) return { term: "", rejected: true };
-  if (phases.length) {
-    const phaseTokens = phases
-      .flatMap((p) => {
-        switch (p) {
-          case "EARLY_PHASE_1":
-            return ["EARLY_PHASE1"];
-          case "PHASE_1":
-            return ["PHASE1"];
-          case "PHASE_1_2":
-            return ["PHASE1", "PHASE2"];
-          case "PHASE_2":
-            return ["PHASE2"];
-          case "PHASE_2_3":
-            return ["PHASE2", "PHASE3"];
-          case "PHASE_3":
-            return ["PHASE3"];
-          case "PHASE_4":
-            return ["PHASE4"];
-          case "NOT_APPLICABLE":
-            return ["NA"];
-          default:
-            return [];
-        }
-      })
-      .filter(Boolean);
-    if (phaseTokens.length) {
-      parts.push(`(${phaseTokens.map((t) => `AREA[Phase]${t}`).join(" OR ")})`);
-    }
-  }
+function yearRange(yearValue: unknown): string | undefined {
+  const year = normalizeYear(yearValue);
+  if (!year) return undefined;
+  return `RANGE[${year}-01-01,${year}-12-31]`;
+}
 
-  const statuses = Array.isArray(filters?.overall_statuses) ? filters.overall_statuses : [];
-  if (statuses.length > 20) return { term: "", rejected: true };
-  if (statuses.length) {
-    parts.push(`(${statuses.map((s) => `AREA[OverallStatus]${s}`).join(" OR ")})`);
+type BuiltQuery = {
+  queryCond?: string;
+  queryTerm?: string;
+  queryLead?: string;
+  querySpons?: string;
+  queryLocn?: string;
+  filterOverallStatus?: string[];
+  filterAdvanced?: string;
+  rejected: boolean;
+};
+
+function buildQuery(filters: TrialsFilters | undefined): BuiltQuery {
+  const queryCond = normalizeTerm(filters?.indication);
+
+  const queryTerm =
+    normalizeTerm(filters?.query_term) ?? normalizeTerm(filters?.query) ?? normalizeTerm(filters?.q);
+
+  const sponsor =
+    normalizeTerm(filters?.sponsor_or_collaborator) ??
+    normalizeTerm(filters?.sponsor) ??
+    normalizeTerm(filters?.lead_sponsor) ??
+    normalizeTerm(filters?.collaborator);
+
+  const phasesRaw = [
+    ...(Array.isArray(filters?.phases) ? filters!.phases : []),
+    ...(Array.isArray(filters?.phase) ? (filters!.phase as Phase[]) : typeof filters?.phase === "string" ? [filters.phase] : []),
+  ].filter((p) => typeof p === "string") as Phase[];
+
+  if (phasesRaw.length > 20) return { rejected: true };
+  const phaseTokens = phasesRaw
+    .flatMap((p) => {
+      switch (p) {
+        case "EARLY_PHASE_1":
+          return ["EARLY_PHASE1"];
+        case "PHASE_1":
+          return ["PHASE1"];
+        case "PHASE_1_2":
+          return ["PHASE1", "PHASE2"];
+        case "PHASE_2":
+          return ["PHASE2"];
+        case "PHASE_2_3":
+          return ["PHASE2", "PHASE3"];
+        case "PHASE_3":
+          return ["PHASE3"];
+        case "PHASE_4":
+          return ["PHASE4"];
+        case "NOT_APPLICABLE":
+          return ["NA"];
+        default:
+          return [];
+      }
+    })
+    .filter(Boolean);
+
+  const statusesRaw = [
+    ...(Array.isArray(filters?.overall_statuses) ? filters!.overall_statuses : []),
+    ...(Array.isArray(filters?.status) ? (filters!.status as OverallStatus[]) : typeof filters?.status === "string" ? [filters.status] : []),
+  ].filter((s) => typeof s === "string") as OverallStatus[];
+
+  if (statusesRaw.length > 20) return { rejected: true };
+  const filterOverallStatus = Array.from(new Set(statusesRaw));
+
+  const locationTerms = [
+    ...(Array.isArray(filters?.countries) ? filters!.countries : []),
+    ...(Array.isArray(filters?.country) ? (filters!.country as string[]) : typeof filters?.country === "string" ? [filters.country] : []),
+    ...(Array.isArray(filters?.location_country)
+      ? (filters!.location_country as string[])
+      : typeof filters?.location_country === "string"
+        ? [filters.location_country]
+        : []),
+  ]
+    .map((value) => (typeof value === "string" ? normalizeLocationTerm(value) : undefined))
+    .filter(Boolean) as string[];
+
+  const dedupedLocations = Array.from(new Set(locationTerms));
+  if (dedupedLocations.length > 50) return { rejected: true };
+  const queryLocn = dedupedLocations.length ? dedupedLocations.join(" OR ") : undefined;
+
+  const advancedParts: string[] = [];
+  if (phaseTokens.length) {
+    advancedParts.push(`(${phaseTokens.map((t) => `AREA[Phase]${t}`).join(" OR ")})`);
   }
 
   if (typeof filters?.study_type === "string" && filters.study_type) {
-    parts.push(`AREA[StudyType]${filters.study_type}`);
+    advancedParts.push(`AREA[StudyType]${filters.study_type}`);
   }
 
-  const sponsor = normalizeTerm(filters?.sponsor_or_collaborator);
-  if (sponsor) {
-    parts.push(`AREA[SponsorCollaborators]${sponsor}`);
+  const lastUpdateRange =
+    closedRange(filters?.last_update_posted_from, filters?.last_update_posted_to) ??
+    yearRange(filters?.last_update_posted_year);
+  if (lastUpdateRange) advancedParts.push(`AREA[LastUpdatePostDate]${lastUpdateRange}`);
+
+  const firstPostedRange =
+    closedRange(filters?.first_posted_from, filters?.first_posted_to) ?? yearRange(filters?.first_posted_year);
+  if (firstPostedRange) advancedParts.push(`AREA[StudyFirstPostDate]${firstPostedRange}`);
+
+  const startDateRange = closedRange(filters?.start_date_from, filters?.start_date_to) ?? yearRange(filters?.start_date_year);
+  if (startDateRange) advancedParts.push(`AREA[StartDate]${startDateRange}`);
+
+  const primaryCompletionRange =
+    closedRange(filters?.primary_completion_date_from, filters?.primary_completion_date_to) ??
+    yearRange(filters?.primary_completion_date_year);
+  if (primaryCompletionRange) advancedParts.push(`AREA[PrimaryCompletionDate]${primaryCompletionRange}`);
+
+  const completionRange =
+    closedRange(filters?.completion_date_from, filters?.completion_date_to) ?? yearRange(filters?.completion_date_year);
+  if (completionRange) advancedParts.push(`AREA[CompletionDate]${completionRange}`);
+
+  if (!queryLocn && dedupedLocations.length) {
+    advancedParts.push(`(${dedupedLocations.map((loc) => `AREA[LocationCountry]${loc}`).join(" OR ")})`);
   }
 
-  const lastUpdateRange = asRange(filters?.last_update_posted_from, filters?.last_update_posted_to);
-  if (lastUpdateRange) parts.push(`AREA[LastUpdatePostDate]${lastUpdateRange}`);
-
-  const firstPostedRange = asRange(filters?.first_posted_from, filters?.first_posted_to);
-  if (firstPostedRange) parts.push(`AREA[StudyFirstPostDate]${firstPostedRange}`);
-
-  const startDateRange = asRange(filters?.start_date_from, filters?.start_date_to);
-  if (startDateRange) parts.push(`AREA[StartDate]${startDateRange}`);
-
-  const primaryCompletionRange = asRange(filters?.primary_completion_date_from, filters?.primary_completion_date_to);
-  if (primaryCompletionRange) parts.push(`AREA[PrimaryCompletionDate]${primaryCompletionRange}`);
-
-  const completionRange = asRange(filters?.completion_date_from, filters?.completion_date_to);
-  if (completionRange) parts.push(`AREA[CompletionDate]${completionRange}`);
-
-  const countries = Array.isArray(filters?.countries)
-    ? filters.countries.map((c) => normalizeCountry(c)).filter(Boolean)
-    : [];
-  if (countries.length > 50) return { term: "", rejected: true };
-  if (countries.length) {
-    parts.push(`(${countries.map((c) => `AREA[LocationCountry]${c}`).join(" OR ")})`);
-  }
-
-  return { term: parts.join(" AND "), rejected: false };
+  return {
+    queryCond,
+    queryTerm,
+    queryLead: sponsor,
+    querySpons: sponsor,
+    queryLocn,
+    filterOverallStatus: filterOverallStatus.length ? filterOverallStatus : undefined,
+    filterAdvanced: advancedParts.length ? advancedParts.join(" AND ") : undefined,
+    rejected: false,
+  };
 }
 
 function mapSort(sort: TrialsSort | undefined): string | undefined {
@@ -264,16 +348,26 @@ function mapSort(sort: TrialsSort | undefined): string | undefined {
 
 export async function searchTrials(input: SearchTrialsInput, { timeoutMs }: { timeoutMs?: number } = {}): Promise<SearchTrialsOutput> {
   try {
-    const indication = typeof input?.filters?.indication === "string" ? input.filters.indication.trim() : "";
-    const { term: queryTerm, rejected } = buildQueryTerm(input?.filters);
-    if (rejected || (!indication && !queryTerm)) {
+    const { queryCond, queryTerm, queryLead, querySpons, queryLocn, filterOverallStatus, filterAdvanced, rejected } = buildQuery(
+      input?.filters,
+    );
+
+    if (
+      rejected ||
+      (!queryCond && !queryTerm && !queryLead && !queryLocn && !filterOverallStatus?.length && !filterAdvanced)
+    ) {
       return { ok: false, error: { code: "INVALID_ARGUMENT", retryable: false } };
     }
 
     const pageSize = Number.isInteger(input?.page_size) ? (input.page_size as number) : DEFAULT_PAGE_SIZE;
     const url = new URL(`${API_BASE}/studies`);
-    if (indication) url.searchParams.set("query.cond", indication);
+    if (queryCond) url.searchParams.set("query.cond", queryCond);
     if (queryTerm) url.searchParams.set("query.term", queryTerm);
+    if (queryLead) url.searchParams.set("query.lead", queryLead);
+    if (querySpons) url.searchParams.set("query.spons", querySpons);
+    if (queryLocn) url.searchParams.set("query.locn", queryLocn);
+    if (filterOverallStatus?.length) url.searchParams.set("filter.overallStatus", filterOverallStatus.join(","));
+    if (filterAdvanced) url.searchParams.set("filter.advanced", filterAdvanced);
     url.searchParams.set("pageSize", String(Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE)));
 
     if (typeof input?.page_token === "string" && input.page_token.trim()) {

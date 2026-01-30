@@ -85,16 +85,11 @@ test("ambiguous indications: adapter encodes query.cond and query.term and does 
   }
 });
 
-test("truncates excessive phases/statuses/countries to avoid runaway URLs", async () => {
+test("rejects excessive phases/statuses/countries to avoid runaway URLs", async () => {
   const originalFetch = globalThis.fetch;
   try {
-    globalThis.fetch = async (input: any) => {
-      const url = new URL(String(input));
-      if (url.hostname === "clinicaltrials.gov" && url.pathname === "/api/v2/studies") {
-        assert.equal(url.searchParams.get("query.term"), "");
-        return jsonResponse({ studies: [] });
-      }
-      throw new Error(`Unexpected fetch url: ${url.toString()}`);
+    globalThis.fetch = async () => {
+      throw new Error("Unexpected fetch call");
     };
 
     const many = Array.from({ length: 60 }, (_, i) => `X${i}`);
@@ -115,22 +110,27 @@ test("truncates excessive phases/statuses/countries to avoid runaway URLs", asyn
   }
 });
 
-test("encodes sponsor, dates, and countries into query.term", async () => {
+test("encodes sponsor aliases, location, status, and advanced filters into query params", async () => {
   const originalFetch = globalThis.fetch;
   try {
     globalThis.fetch = async (input: any) => {
       const url = new URL(String(input));
       if (url.hostname === "clinicaltrials.gov" && url.pathname === "/api/v2/studies") {
         assert.equal(url.searchParams.get("query.cond"), null);
-        const term = url.searchParams.get("query.term");
-        assert.ok(term?.includes("AREA[SponsorCollaborators]Lundbeck"));
-        assert.ok(term?.includes("AREA[LastUpdatePostDate]RANGE[2024-01-01,2024-12-31]"));
-        assert.ok(term?.includes("AREA[StudyFirstPostDate]RANGE[2023-01-01,]"));
-        assert.ok(term?.includes("AREA[StartDate]RANGE[2022-01-01,2022-12-31]"));
-        assert.ok(term?.includes("AREA[PrimaryCompletionDate]RANGE[,2025-06-30]"));
-        assert.ok(term?.includes("AREA[CompletionDate]RANGE[2025-07-01,]"));
-        assert.ok(term?.includes("AREA[LocationCountry]US"));
-        assert.ok(term?.includes("AREA[LocationCountry]DK"));
+        assert.equal(url.searchParams.get("query.lead"), "Lundbeck");
+        assert.equal(url.searchParams.get("query.spons"), "Lundbeck");
+        assert.equal(url.searchParams.get("query.locn"), "US OR DK");
+        assert.equal(url.searchParams.get("filter.overallStatus"), "RECRUITING,COMPLETED");
+
+        const advanced = url.searchParams.get("filter.advanced") ?? "";
+        assert.ok(advanced.includes("AREA[Phase]PHASE2"));
+        assert.ok(advanced.includes("AREA[Phase]PHASE3"));
+        assert.ok(advanced.includes("AREA[LastUpdatePostDate]RANGE[2024-01-01,2024-12-31]"));
+        assert.ok(advanced.includes("AREA[StudyFirstPostDate]RANGE[2023-01-01,2023-01-01]"));
+        assert.ok(advanced.includes("AREA[StartDate]RANGE[2022-01-01,2022-12-31]"));
+        assert.ok(advanced.includes("AREA[PrimaryCompletionDate]RANGE[2025-06-30,2025-06-30]"));
+        assert.ok(advanced.includes("AREA[CompletionDate]RANGE[2025-07-01,2025-07-01]"));
+        assert.ok(!advanced.includes("AREA[LocationCountry]"));
         return jsonResponse({ studies: [] });
       }
       throw new Error(`Unexpected fetch url: ${url.toString()}`);
@@ -140,6 +140,8 @@ test("encodes sponsor, dates, and countries into query.term", async () => {
       {
         filters: {
           sponsor_or_collaborator: "  Lundbeck  ",
+          phases: ["PHASE_2", "PHASE_3"],
+          overall_statuses: ["RECRUITING", "COMPLETED"],
           last_update_posted_from: "2024-01-01",
           last_update_posted_to: "2024-12-31",
           first_posted_from: "2023-01-01",
@@ -159,17 +161,17 @@ test("encodes sponsor, dates, and countries into query.term", async () => {
   }
 });
 
-test("partial ranges emit open-ended RANGE tokens", async () => {
+test("partial ranges emit closed RANGE tokens", async () => {
   const originalFetch = globalThis.fetch;
   try {
     globalThis.fetch = async (input: any) => {
       const url = new URL(String(input));
       if (url.hostname === "clinicaltrials.gov" && url.pathname === "/api/v2/studies") {
-        const term = url.searchParams.get("query.term") ?? "";
-        assert.ok(term.includes("AREA[LastUpdatePostDate]RANGE[,2024-12-31]"));
-        assert.ok(term.includes("AREA[StudyFirstPostDate]RANGE[2023-01-01,]"));
-        assert.ok(term.includes("AREA[StartDate]RANGE[,2022-12-31]"));
-        assert.ok(term.includes("AREA[CompletionDate]RANGE[2025-07-01,]"));
+        const advanced = url.searchParams.get("filter.advanced") ?? "";
+        assert.ok(advanced.includes("AREA[LastUpdatePostDate]RANGE[2024-12-31,2024-12-31]"));
+        assert.ok(advanced.includes("AREA[StudyFirstPostDate]RANGE[2023-01-01,2023-01-01]"));
+        assert.ok(advanced.includes("AREA[StartDate]RANGE[2022-12-31,2022-12-31]"));
+        assert.ok(advanced.includes("AREA[CompletionDate]RANGE[2025-07-01,2025-07-01]"));
         return jsonResponse({ studies: [] });
       }
       throw new Error(`Unexpected fetch url: ${url.toString()}`);
@@ -182,6 +184,64 @@ test("partial ranges emit open-ended RANGE tokens", async () => {
           first_posted_from: "2023-01-01",
           start_date_to: "2022-12-31",
           completion_date_from: "2025-07-01",
+        },
+      },
+      { timeoutMs: 50 },
+    );
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.data.trials, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("year-only filters emit closed RANGE tokens", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (input: any) => {
+      const url = new URL(String(input));
+      if (url.hostname === "clinicaltrials.gov" && url.pathname === "/api/v2/studies") {
+        const advanced = url.searchParams.get("filter.advanced") ?? "";
+        assert.ok(advanced.includes("AREA[StudyFirstPostDate]RANGE[2024-01-01,2024-12-31]"));
+        return jsonResponse({ studies: [] });
+      }
+      throw new Error(`Unexpected fetch url: ${url.toString()}`);
+    };
+
+    const result = await searchTrials(
+      {
+        filters: {
+          first_posted_year: 2024,
+        },
+      },
+      { timeoutMs: 50 },
+    );
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.data.trials, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("sponsor-only searches succeed without indication or query", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (input: any) => {
+      const url = new URL(String(input));
+      if (url.hostname === "clinicaltrials.gov" && url.pathname === "/api/v2/studies") {
+        assert.equal(url.searchParams.get("query.lead"), "Lundbeck");
+        assert.equal(url.searchParams.get("query.spons"), "Lundbeck");
+        assert.equal(url.searchParams.get("query.term"), null);
+        assert.equal(url.searchParams.get("query.cond"), null);
+        return jsonResponse({ studies: [] });
+      }
+      throw new Error(`Unexpected fetch url: ${url.toString()}`);
+    };
+
+    const result = await searchTrials(
+      {
+        filters: {
+          sponsor: "Lundbeck",
         },
       },
       { timeoutMs: 50 },

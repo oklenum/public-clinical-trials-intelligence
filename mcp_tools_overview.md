@@ -14,6 +14,6 @@ This demo MCP server exposes a small, stable set of **non-overlapping** tools fo
 
 ### `search_trials`
 
-- **Filters:** `indication` → `query.cond`; `query_term` → free term; `phases`, `overall_statuses`, `study_type`, `sponsor_or_collaborator`, `countries`, `first_posted_from/to`, `last_update_posted_from/to`, `start_date_from/to`, `primary_completion_date_from/to`, `completion_date_from/to` encode to ClinicalTrials.gov `AREA[...]` filters (dates as `RANGE[from,to]`).
+- **Filters:** `indication` → `query.cond`; `query_term`/`query`/`q` → `query.term`; sponsor aliases → `query.lead` + `query.spons`; country/location aliases → `query.locn`; `overall_statuses`/`status` → `filter.overallStatus`; phases, study type, and date/year filters → `filter.advanced` `AREA[...]` clauses (dates as closed `RANGE[from,to]`).
 - **Pagination:** `page_size` defaults to `25` (bounded to `1..100`); use `next_page_token` from the prior response to continue.
 - **Sorting:** defaults to `LAST_UPDATE_POSTED` descending for stable ordering.

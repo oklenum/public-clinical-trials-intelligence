@@ -7,9 +7,12 @@
 **Supported filters (deterministic)**
 
 - `filters.indication`: passed as `query.cond` (condition/indication keyword)
-- `filters.query_term`: passed as `query.term` (free-form keyword string; no narrative)
-- `filters.phases`: added to `query.term` as `AREA[Phase]...` constraints
-- `filters.overall_statuses`: added to `query.term` as `AREA[OverallStatus]...` constraints
+- `filters.query_term` / `filters.query` / `filters.q`: passed as `query.term` (free-form keyword string; no narrative)
+- `filters.sponsor_or_collaborator` / `filters.sponsor` / `filters.lead_sponsor` / `filters.collaborator`: passed as `query.lead` and `query.spons`
+- `filters.countries` / `filters.country` / `filters.location_country`: joined with `OR` and passed as `query.locn`
+- `filters.overall_statuses` / `filters.status`: passed as `filter.overallStatus` (comma-separated)
+- `filters.phases`, `filters.study_type`, and date/year filters: encoded into `filter.advanced` with `AREA[...]` clauses
+- `AREA[LocationCountry]...` is only emitted when `query.locn` is not used
 
 **Pagination / bounds**
 

@@ -6,6 +6,19 @@
       "type": "string",
       "format": "date"
     },
+    "Year": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 1800,
+          "maximum": 2100
+        },
+        {
+          "type": "string",
+          "pattern": "^\\d{4}$"
+        }
+      ]
+    },
     "NctId": {
       "type": "string",
       "pattern": "^NCT\\d{8}$"
@@ -99,6 +112,14 @@
           "$ref": "#/$defs/NonEmptyString",
           "description": "Free-form query term for ClinicalTrials.gov query.term (kept as a single string, not narrative)."
         },
+        "query": {
+          "$ref": "#/$defs/NonEmptyString",
+          "description": "Alias for query_term."
+        },
+        "q": {
+          "$ref": "#/$defs/NonEmptyString",
+          "description": "Alias for query_term."
+        },
         "phases": {
           "type": "array",
           "items": {
@@ -106,6 +127,22 @@
           },
           "minItems": 1,
           "uniqueItems": true
+        },
+        "phase": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Phase"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Phase"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          ],
+          "description": "Alias for phases."
         },
         "overall_statuses": {
           "type": "array",
@@ -115,12 +152,40 @@
           "minItems": 1,
           "uniqueItems": true
         },
+        "status": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/OverallStatus"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/OverallStatus"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          ],
+          "description": "Alias for overall_statuses."
+        },
         "study_type": {
           "$ref": "#/$defs/StudyType"
         },
         "sponsor_or_collaborator": {
           "$ref": "#/$defs/NonEmptyString",
           "description": "Organization name fragment to match sponsors/collaborators."
+        },
+        "sponsor": {
+          "$ref": "#/$defs/NonEmptyString",
+          "description": "Alias for sponsor_or_collaborator."
+        },
+        "lead_sponsor": {
+          "$ref": "#/$defs/NonEmptyString",
+          "description": "Alias for sponsor_or_collaborator."
+        },
+        "collaborator": {
+          "$ref": "#/$defs/NonEmptyString",
+          "description": "Alias for sponsor_or_collaborator."
         },
         "countries": {
           "type": "array",
@@ -131,11 +196,46 @@
           "uniqueItems": true,
           "description": "ISO 3166-1 alpha-2 country codes."
         },
+        "country": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/CountryCode"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CountryCode"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          ],
+          "description": "Alias for countries."
+        },
+        "location_country": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/CountryCode"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CountryCode"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          ],
+          "description": "Alias for countries."
+        },
         "first_posted_from": {
           "$ref": "#/$defs/IsoDate"
         },
         "first_posted_to": {
           "$ref": "#/$defs/IsoDate"
+        },
+        "first_posted_year": {
+          "$ref": "#/$defs/Year"
         },
         "last_update_posted_from": {
           "$ref": "#/$defs/IsoDate"
@@ -143,11 +243,17 @@
         "last_update_posted_to": {
           "$ref": "#/$defs/IsoDate"
         },
+        "last_update_posted_year": {
+          "$ref": "#/$defs/Year"
+        },
         "start_date_from": {
           "$ref": "#/$defs/IsoDate"
         },
         "start_date_to": {
           "$ref": "#/$defs/IsoDate"
+        },
+        "start_date_year": {
+          "$ref": "#/$defs/Year"
         },
         "primary_completion_date_from": {
           "$ref": "#/$defs/IsoDate"
@@ -155,11 +261,17 @@
         "primary_completion_date_to": {
           "$ref": "#/$defs/IsoDate"
         },
+        "primary_completion_date_year": {
+          "$ref": "#/$defs/Year"
+        },
         "completion_date_from": {
           "$ref": "#/$defs/IsoDate"
         },
         "completion_date_to": {
           "$ref": "#/$defs/IsoDate"
+        },
+        "completion_date_year": {
+          "$ref": "#/$defs/Year"
         }
       }
     },

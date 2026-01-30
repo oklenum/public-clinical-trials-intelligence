@@ -42,3 +42,21 @@ test("rejects unexpected additionalProperties", async () => {
   assert.ok(result.error.issues.some((issue) => issue.path === "/extra"));
 });
 
+test("accepts search_trials alias filters", async () => {
+  const { schemas } = await loadToolSchemas({ schemasPath: path.resolve(process.cwd(), "mcp_tool_schemas.json") });
+  const validate = createToolArgumentsValidator(schemas);
+
+  const result = validate("search_trials", {
+    filters: {
+      q: "diabetes",
+      sponsor: "Lundbeck",
+      phase: ["PHASE_2"],
+      status: ["RECRUITING"],
+      country: "US",
+      location_country: "DK",
+      first_posted_year: 2024,
+    },
+  });
+
+  assert.equal(result.ok, true);
+});
