@@ -138,6 +138,7 @@ npm run mcp:server:http
 Use these as example “prompts” in an MCP-capable client (or adapt them into tool calls). For a longer set, see `demo_prompts.md`.
 
 - “Find Phase 3 Alzheimer’s trials that are recruiting or completed; return 5 results and show NCT ID, title, phase, status, sponsor, countries count, and last update.”
+- “Find recruiting Phase 2 trials sponsored by Lundbeck posted in 2024 in the US/Denmark; return 5 results and show NCT ID, title, phase, status, sponsor, first posted, last update.”
 - “Open `NCT03887455` and summarize phase, status, enrollment, sponsors, dates, and conditions using only tool output.”
 - “For `NCT03887455`, list primary and secondary outcomes with timeframes (no interpretation).”
 - “Compare `NCT03887455` vs `NCT04437511` on phase, status, enrollment, primary outcomes, and countries.”

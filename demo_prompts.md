@@ -25,7 +25,30 @@ Use the `search_trials` tool with the exact arguments below, then list the 5 ret
 
 ---
 
-## 2) `get_trial` — Full authoritative record (single NCT ID)
+## 2) `search_trials` — Sponsor + phase + year + country (alias coverage)
+
+**Prompt (copy/paste):**
+
+Use the `search_trials` tool with the exact arguments below, then list up to 5 returned trials as a table with: NCT ID, brief title, phase(s), overall status, lead sponsor (name), first posted, and last update posted. Use the required demo answer format (Answer / Provenance / Data source / Evidence).
+
+```json
+{
+  "filters": {
+    "sponsor": "Lundbeck",
+    "phase": ["PHASE_2"],
+    "status": ["RECRUITING"],
+    "first_posted_year": 2024,
+    "country": ["US", "DK"]
+  },
+  "page_size": 5,
+  "sort": { "field": "LAST_UPDATE_POSTED", "direction": "DESC" },
+  "include_fields": ["NCT_ID", "BRIEF_TITLE", "PHASES", "OVERALL_STATUS", "SPONSORS", "FIRST_POSTED", "LAST_UPDATE_POSTED"]
+}
+```
+
+---
+
+## 3) `get_trial` — Full authoritative record (single NCT ID)
 
 **Prompt (copy/paste):**
 
@@ -37,7 +60,7 @@ Use the `get_trial` tool for NCT `NCT03887455`. From the returned JSON, extract 
 
 ---
 
-## 3) `get_trial_details` — Design + eligibility (without outcomes)
+## 4) `get_trial_details` — Design + eligibility (without outcomes)
 
 **Prompt (copy/paste):**
 
@@ -49,7 +72,7 @@ Use the `get_trial_details` tool for NCT `NCT04437511`. From the returned JSON, 
 
 ---
 
-## 4) `get_trial_endpoints` — Primary/secondary outcomes with timeframes
+## 5) `get_trial_endpoints` — Primary/secondary outcomes with timeframes
 
 **Prompt (copy/paste):**
 
@@ -61,7 +84,7 @@ Use the `get_trial_endpoints` tool for NCT `NCT03887455`. List all primary outco
 
 ---
 
-## 5) `compare_trials` — Side-by-side comparison (two NCT IDs)
+## 6) `compare_trials` — Side-by-side comparison (two NCT IDs)
 
 **Prompt (copy/paste):**
 
@@ -76,7 +99,7 @@ Use the `compare_trials` tool with the exact arguments below. Present a side-by-
 
 ---
 
-## 6) `aggregate_trials` — Distribution by overall status
+## 7) `aggregate_trials` — Distribution by overall status
 
 **Prompt (copy/paste):**
 
@@ -91,4 +114,3 @@ Use the `aggregate_trials` tool with the exact arguments below. Report the distr
   "sort": { "metric": "COUNT_TRIALS", "direction": "DESC" }
 }
 ```
-

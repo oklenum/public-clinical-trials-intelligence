@@ -124,3 +124,6 @@ npm run mcp:server:http  # HTTP transport for debugging
 - `scripts/tests/edgeCases.test.ts`: added deterministic “happy path” tests (mocked fetch) for `search_trials` and `search_pubmed`.
 - `demo_scope.md` and `demo_story.md`: removed organization-specific/internal references to keep the repo public/demo-safe.
 
+## Addendum (2026-01-30)
+
+- Live pagination check against ClinicalTrials.gov via `search_trials` succeeded (page 1 returned `next_page_token`, page 2 fetched with the same params + `page_token`).
