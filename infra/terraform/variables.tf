@@ -30,7 +30,7 @@ variable "container_app_name" {
 variable "image_tag" {
   description = "Container image tag"
   type        = string
-  default     = "1.0.1"
+  default     = "1.0.2"
 }
 
 variable "cpu" {

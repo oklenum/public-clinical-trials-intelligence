@@ -1,7 +1,10 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import http from "node:http";
 import { performance } from "node:perf_hooks";
 
@@ -17,13 +20,16 @@ import {
   tool_search_trials,
 } from "../dataAdapter.js";
 import type { Err } from "../adapters/http.js";
-import { formatToolInvocationLogLine, summarizeToolResultForLog } from "../utils/toolLogging.js";
+import {
+  formatToolInvocationLogLine,
+  summarizeToolResultForLog,
+} from "../utils/toolLogging.js";
 
 const { schemas } = await loadToolSchemas();
 const validateToolArguments = createToolArgumentsValidator(schemas);
 
 const server = new Server(
-  { name: "public-clinical-trials-intelligence", version: "0.1.0" },
+  { name: "public-clinical-trials-intelligence", version: "1.0.2" },
   { capabilities: { tools: {} } },
 );
 
@@ -59,7 +65,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const durationMs = performance.now() - startedAt;
     const responseText = [
       validation.error.message,
-      ...validation.error.issues.map((issue) => `- ${issue.path}: ${issue.message}`),
+      ...validation.error.issues.map(
+        (issue) => `- ${issue.path}: ${issue.message}`,
+      ),
     ].join("\n");
     const resultBytes = Buffer.byteLength(responseText, "utf8");
 
@@ -97,7 +105,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     ? await tool_search_pubmed(validation.value as any)
                     : ({
                         ok: false,
-                        error: { code: "INTERNAL_ERROR", retryable: false, context: { tool: toolName } },
+                        error: {
+                          code: "INTERNAL_ERROR",
+                          retryable: false,
+                          context: { tool: toolName },
+                        },
                       } satisfies Err);
 
     const responseText = JSON.stringify(output);
@@ -123,7 +135,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       error: {
         code: "INTERNAL_ERROR",
         retryable: false,
-        context: { error: error instanceof Error ? error.message : String(error), tool: toolName },
+        context: {
+          error: error instanceof Error ? error.message : String(error),
+          tool: toolName,
+        },
       },
     };
 
@@ -156,8 +171,14 @@ async function startStreamableHttp() {
   const host = process.env.MCP_HTTP_HOST ?? "127.0.0.1";
   const routePath = process.env.MCP_HTTP_PATH ?? "/mcp";
 
-  if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) {
-    throw new Error(`Invalid MCP_HTTP_PORT: ${process.env.MCP_HTTP_PORT ?? ""}`);
+  if (
+    !Number.isInteger(requestedPort) ||
+    requestedPort < 0 ||
+    requestedPort > 65535
+  ) {
+    throw new Error(
+      `Invalid MCP_HTTP_PORT: ${process.env.MCP_HTTP_PORT ?? ""}`,
+    );
   }
 
   const transport = new StreamableHTTPServerTransport({
@@ -192,7 +213,9 @@ async function startStreamableHttp() {
     } catch (error) {
       res.statusCode = 500;
       res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ error: (error as Error).message ?? String(error) }));
+      res.end(
+        JSON.stringify({ error: (error as Error).message ?? String(error) }),
+      );
     }
   });
 
@@ -214,7 +237,9 @@ async function startStreamableHttp() {
   process.once("SIGINT", () => void shutdown());
   process.once("SIGTERM", () => void shutdown());
 
-  console.error(`MCP Streamable HTTP listening on http://${host}:${actualPort}${routePath}`);
+  console.error(
+    `MCP Streamable HTTP listening on http://${host}:${actualPort}${routePath}`,
+  );
 }
 
 try {
